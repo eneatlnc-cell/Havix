@@ -2,7 +2,7 @@
 
 **Haven of Affinity —— 高认知个体自组织生境协议**
 
-Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)。
+Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)。
 
 > 当前阶段：**M8.3 4 节点集成测试已完成** ✅ · M8 阶段全部完成 · MVP 全量审计通过
 
