@@ -499,9 +499,30 @@ export class CreditLedger {
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
       throw new Error(`amount 必须是正数，实际 ${amount}`)
     }
-    const newFrom = this.debit(fromDid, amount)
-    const newTo = this.credit(toDid, amount)
-    return { fromBalance: newFrom, toBalance: newTo }
+    // P0-2 修复（AUDIT-M10）：transfer 原子性 —— debit 成功后若 credit 抛错，
+    // 必须回滚 debit，否则金额凭空消失。先用 debit 校验余额并扣款，credit 失败时 refund。
+    let newFrom
+    try {
+      newFrom = this.debit(fromDid, amount)
+    } catch (err) {
+      throw err  // debit 失败（余额不足等）直接抛出，状态未变
+    }
+    try {
+      const newTo = this.credit(toDid, amount)
+      return { fromBalance: newFrom, toBalance: newTo }
+    } catch (err) {
+      // credit 失败 → 回滚 debit
+      try {
+        this.credit(fromDid, amount)  // 退还 fromDid
+      } catch (refundErr) {
+        // 退款也失败（极端情况），抛出原始错误 + 退款失败信息
+        throw new Error(
+          `transfer 回滚失败：debit 已扣 ${amount} 但 credit 与 refund 均失败。` +
+          `原始错误: ${err.message}; 退款错误: ${refundErr.message}`,
+        )
+      }
+      throw err
+    }
   }
 }
 

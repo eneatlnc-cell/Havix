@@ -1646,6 +1646,23 @@ export class SNode {
             amount: payload.amount,
           })
         }
+        // P0-1 修复（AUDIT-M10）：vote-cast 校验 senderId ∈ panel，与 verdict 路径对称
+        //   原实现不校验——任意节点可伪造投票污染本地仲裁视图。
+        //   fail-closed：panel 未镜像时拒绝投票镜像（强制等待 panel 消息收敛后再处理 vote）
+        const disputeForVote = dispute ?? this.arbitrationRegistry.getDispute(disputeId)
+        if (!disputeForVote?.panel || disputeForVote.panel.length === 0) {
+          this.log('warn', 'arbitration',
+            `vote-cast action: dispute ${disputeId} 本地未镜像 panel，拒绝镜像投票（fail-closed, P0-1 修复）`)
+          return {
+            applied: false,
+            reason: '本地未镜像 panel，拒绝镜像投票（fail-closed，P0-1 修复）',
+          }
+        }
+        if (!disputeForVote.panel.includes(senderId)) {
+          this.log('warn', 'arbitration',
+            `vote-cast action: senderId(${senderId?.slice(0, 12)}...) 不在 panel 中，拒绝镜像投票`)
+          return { applied: false, reason: 'vote-cast senderId 不在仲裁团 panel 中（P0-1 修复）' }
+        }
         return { applied: true }
       }
 
