@@ -95,8 +95,10 @@
 
 ### 3.2 权限声明（白名单）
 
+共 28 项权限，按 8 大 category 分组（market 6 + credit 4 + wiki 3 + tunnel 3 + arbitration 3 + identity 5 + transport 2 + ipfs 2 = 28）：
+
 ```
-# 市场权限
+# 市场权限（6 项）
 market:create         创建新市场
 market:invite         邀请成员
 market:join           加入市场
@@ -104,31 +106,39 @@ market:publish        发布私域消息
 market:subscribe      订阅私域消息
 market:leave          离开市场
 
-# Credit 权限
+# Credit 权限（4 项）
 credit:issue          签发 credit（需高信誉）
 credit:consume        消费 credit
 credit:transfer       转账
 credit:balance        查询余额
 
-# 维基权限
+# 维基权限（3 项）
 wiki:publish          发布条目（需 vouch 阈值）
 wiki:list             列出条目
 wiki:get              获取条目
 
-# 隧道权限
+# 隧道权限（3 项）
 tunnel:open           打开隧道
 tunnel:send           发送隧道消息
 tunnel:close          关闭隧道
 
-# 仲裁权限
+# 仲裁权限（3 项）
 arbitration:file      发起仲裁
 arbitration:vote      投票（需仲裁员资格）
 arbitration:resolve   裁决（需仲裁团多数）
 
-# 高级权限
-identity:context      获取 context 子身份
-transport:publish     直接 gossipsub 发布
+# 身份权限（5 项：基础 + 4 context）
+identity:context        获取本节点 context 信息（含完整 4-context 状态面板，verify 任意 context 都可）
+identity:context:A      用 context-A 签名（A 是互联网通行身份，慎用）
+identity:context:B      用 context-B 签名（业务身份）
+identity:context:C      用 context-C 签名（私聊身份）
+identity:context:D      用 context-D 签名（维基编辑身份，需 vouch 阈值）
+
+# 传输权限（2 项）
+transport:publish     直接 gossipsub 发布（自定义 topic）
 transport:subscribe   直接 gossipsub 订阅
+
+# IPFS 权限（2 项）
 ipfs:read             IPFS 读取
 ipfs:write            IPFS 写入
 ```

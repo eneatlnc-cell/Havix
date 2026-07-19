@@ -2,9 +2,9 @@
 
 **Haven of Affinity —— 高认知个体自组织生境协议**
 
-Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)。
+Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M8.3 4 节点集成测试已完成** ✅ · M8 阶段全部完成 · MVP 全量审计通过
+> 当前阶段：**M9.1 AppManifest + 解析 + 校验已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -174,6 +174,37 @@ M8.3 在真实 4 节点网络中验证 M1-M8 全部能力端到端可用。这�
 ✅ M8.3-1 拓扑连接验证（6 个子测试：A 启动 + B/C/D bootstrap + B/C/D 各自 1 邻居 + A 看到 3 邻居 + 4 节点订阅 3 topic）
 ✅ M8.3-2 gossipsub 跨节点传播（5 个子测试：setup + vouch + wiki-announce + credit 镜像，每类验证字段一致性）
 ✅ M8.3-3 持久化 + 重启恢复（6 个子测试：round1 issue + stop flush + round2 restart loadState + replay protection + fresh issue）
+
+### M9.1 AppManifest + 解析 + 校验
+
+M9 阶段二第一步：把 Havix 节点的协议能力封装为 App 可调用的 SDK。详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
+
+**核心设计哲学**（M9 理论修正）：
+
+1. **4-context 取舍哲学**：Havix 的 4-context 隔离（A/B/C/D）不是"每个 App 都该用全部 4 个"，而是**该用哪个就用哪个，不该用的刻意不用，每个选择都有明确理由**。翻译市场最终 `contexts: [B]`——A 刻意不用（互联网通行身份不与业务关联，破坏 M2.1 不可关联性），C 暂不用（私聊身份暂无场景但 App UI 显示"未启用"让用户感知完整身份模型），D 留给维基 App（需 vouch 阈值才有意义）。真正体现隔离理念是**通过不用 A/C/D 来体现**，不是通过用全部 4 个。
+
+2. **严格 GET-only**：M8.2 Web 面板是 GET-only（无 mutation），M9 App Web API **不允许破例**。SDK 不提供 `app.web.post()` / `put()` / `delete()` 接口，强制所有 mutation 走 CLI。Web UI 上的 mutation 按钮（如"发布需求"）弹窗显示对应 CLI 命令让用户复制到 Havix REPL 执行——"协议即法律"，节点互动必须走 Havix 网络协议。
+
+**M9.1 范围**：
+
+- ✅ `sdk/errors.js`：7 个 SDK 错误类型（HavixSdkError 基类 + ManifestError / PermissionDeniedError / ContextNotEnabledError / AppNotFoundError / AppAlreadyLoadedError / InvalidAppStateError），含错误码 `code` 字段供机器可读
+- ✅ `sdk/permissions.js`：28 项权限白名单（market 6 + credit 4 + wiki 3 + tunnel 3 + arbitration 3 + identity 5 + transport 2 + ipfs 2），按 8 大 category 分组；`validatePermissions()` / `checkPermission()` / `hasPermission()` / `getPermissionsByCategory()` 校验函数；白名单 Object.freeze 不可变
+- ✅ `sdk/manifest.js`：`AppManifest` 类（11 字段：name / version / capability / permissions / entryPoint 必需 + inviteTokenFormat / spaCid / minReputation / trustWeight / dataDir / contexts / description 可选）；3 个静态工厂方法 `fromObject()` / `fromJson()` / `fromYaml()`；内置极简 YAML 解析器（不引入外部依赖，仅支持扁平 key: value + 数组 + `[]`/`{}` 内联字面量）；`validateManifest()` 校验函数；实例 `Object.freeze` 不可变；`hasPermission()` / `hasContext()` / `toJSON()` / `toString()` 方法
+- ✅ `sdk/index.js`：SDK 入口，导出所有 M9.1 已实现部分（createApp 函数将在 M9.2 实现）
+
+**安全校验**：
+
+- name 必须 kebab-case（小写字母开头 + 仅含小写字母/数字/短横线，长度 1-64）
+- version 必须 semver 格式
+- capability 必须在 5 个白名单值中（market / wiki / tunnel / public / custom）
+- entryPoint 不允许绝对路径 / `..` 路径穿越（防 App 加载文件系统任意位置的代码）
+- dataDir 同样不允许绝对路径 / `..` 路径穿越（防逃逸 App 目录）
+- trustWeight 必须 0.0-1.0 有限数字（NaN/Infinity 拒绝）
+- minReputation 必须 >= 0 有限数字
+- contexts 必须是 ['A'/'B'/'C'/'D'] 的子集（无重复）
+- permissions 必须在 28 项白名单中（无重复 / 非字符串拒绝）
+
+✅ 全量回归 707/707 通过（M8.3 后 596 + M9.1 新增 111，无 regression）
 
 ### M1 双平面传输基线
 
@@ -455,14 +486,18 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e，约 50 秒，共 596 个用例）
+# 全部测试（单元 + e2e + SDK，约 50 秒，共 707 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（596 个用例，全部通过）：
+测试覆盖（707 个用例，全部通过）：
+
+**M9.1 SDK 阶段（111 个）**
+- permissions 单元测试（36 个）：白名单完整性（28 项权限 + 8 大 category + 权限名格式 + 唯一性）+ isValidPermission / validatePermissions（合法/空/非数组/未知/重复/非字符串）+ checkPermission（拥有/缺权限抛 PermissionDeniedError/非数组/错误信息含 app 名/code）+ hasPermission（不抛错）+ getPermissionsByCategory + Object.freeze 不可变性
+- manifest 单元测试（75 个）：构造（合法 manifest + 默认值 + dataDir 默认等于 name + empty-app 模板）+ 必需字段缺失（name/version/capability/permissions/entryPoint 各 1）+ name 校验（非 kebab-case / 类型错误）+ version 校验（非 semver）+ capability 校验（非法值 / 5 个白名单值）+ permissions 校验（未知 / 重复 / 非字符串 / 非数组）+ entryPoint 校验（绝对路径 / `..` 路径穿越 / 空字符串）+ trustWeight 边界（< 0 / > 1 / = 0 / = 1 / NaN / Infinity）+ minReputation 边界（< 0 / = 0）+ contexts 校验（非法值 / 重复 / 非字符串 / 非数组 / 全部 4 个合法）+ inviteTokenFormat / spaCid / dataDir 校验 + raw 入参类型校验（null/数组/字符串）+ fromObject / fromJson / fromYaml 静态工厂 + 极简 YAML 解析器（扁平 key:value / 数组 / 注释 / 空行 / 引号 / `[]` 内联）+ hasPermission / hasContext / toJSON / toString + Object.freeze 不可变 + validateManifest 函数
 
 **M8.3 4 节点集成测试阶段（17 个，需 HAVIX_SKIP_E2E=0 启用）**
 - four-nodes-e2e 集成测试（17 个子测试）：M8.3-1 star 拓扑连接（6 个：A 启动 + B/C/D bootstrap + B/C/D 各自 1 邻居 + A 看到 3 邻居 + 4 节点订阅 3 公共 topic）、M8.3-2 gossipsub 跨节点传播（5 个：setup + vouch 跨节点同步 +1 + wiki-announce 跨节点索引 manifest + credit 跨节点镜像 freeze+credit）、M8.3-3 持久化 + 重启恢复（6 个：round1 issue + stop flush 8 个 ledger 文件 + round2 restart loadState 恢复 + replay protection 拒绝同 nonce + fresh issue 正常应用）
@@ -528,7 +563,11 @@ havix/
 ├── .env.example                   环境变量模板
 ├── Havix-Technical-Whitepaper.md  技术白皮书
 ├── Havix-Vision.html              愿景展示页
-├── src/
+├── DEPLOY.md                      部署运行说明（13 章节）
+├── ROADMAP.md                     MVP 后开发路线（M9-M12+）
+├── M9-DESIGN.md                   M9 App SDK 详细设计（16 章节）
+├── TRANSLATION-MARKET.md          第一个 App 翻译市场设计
+├── src/                           协议层（M1-M8 已实现）
 │   ├── s-node.js                  主入口（M1+M2+M3+M4+M5+M6+M7+M8.1+M8.2：传输基线 + DID 签名 + 维基协议 + Credit 双轨经济 + 单跳 Relay 隧道 + 临时仲裁团 + 邀请市场双重加密 + 持久化 + startApp 可测试函数 + Cli/WebPanel 集成）
 │   ├── config.js                  配置加载（命令行 + 环境变量 + 默认值；M8.2 新增 --repl / --web / --web-port / --web-host 4 个应用层选项）
 │   ├── identity.js                4-context DID 派生（HKDF + Ed25519）
@@ -549,6 +588,14 @@ havix/
 │   └── app/
 │       ├── cli.js                 命令行 REPL（M8.2-1/2/3 已实现：tokenize/parseArgs + 43 个命令 = 7 诊断 + 11 M3-M4 + 25 M5-M7）
 │       └── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化）
+├── sdk/                           Havix SDK（M9.1 新增）
+│   ├── index.js                   SDK 入口（导出 errors + permissions + manifest）
+│   ├── errors.js                  7 个 SDK 错误类型（HavixSdkError 基类 + 6 个子类）
+│   ├── permissions.js             28 项权限白名单 + 6 个校验函数（isValidPermission / validatePermissions / checkPermission / hasPermission / getPermissionsByCategory）
+│   ├── manifest.js                AppManifest 类 + 极简 YAML 解析器 + validateManifest
+│   └── __tests__/
+│       ├── permissions.test.js    权限白名单 + 校验函数单元测试（36 个）
+│       └── manifest.test.js       AppManifest + YAML 解析器单元测试（75 个）
 └── test/
     ├── persistence.test.js            M8.1 持久化工具单元测试（28 个）
     ├── persistence-restart.test.js    M8.1 重启恢复集成测试（11 个）

@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/s-node.js",
     "dev": "node --watch src/s-node.js",
-    "test": "node --test 'test/**/*.test.js'",
+    "test": "node --test 'test/**/*.test.js' 'sdk/__tests__/**/*.test.js'",
     "lint": "echo \"(TODO: M8 接入 eslint)\" && exit 0"
   },
   "engines": {
