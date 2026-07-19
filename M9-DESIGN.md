@@ -1013,7 +1013,7 @@ test('SDK 集成：App A 创建市场 → App B 加入 → 双方收到消息', 
 | **M9.2** | SDK 入口 + 7 大接口骨架 + mock SNode | 中 | ~70 测试 | ✅ 253 测试 |
 | **M9.3** | AppManager + SNode 集成 + config 选项 | 中 | ~15 测试 | ✅ 52 测试 |
 | **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 | ✅ 24 测试 |
-| **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 | ⏳ |
+| **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 | ✅ 28 测试 |
 
 每个子阶段完成后跑全量回归，确认无 regression。
 
@@ -1152,8 +1152,18 @@ havix/                          # 主仓库
    - HTML 拓扑首页 header 新增 `Apps` 链接；侧边栏新增 `Apps（M9.4）` 区块
    - 严格 GET-only：POST/PUT/DELETE 返回 405，hint 提示"协议即法律，mutation 走 CLI"
    - AppManager 未启用时 `/apps/` 与 `/api/apps/...` 返回 503 + 提示 `--apps` 开启
-5. M9.5 empty-app 参考模板 + 集成测试：提供 `apps/empty-app/` 参考模板（manifest + entryPoint + start/stop hook），文档说明 App 开发流程；端到端启动节点加载 empty-app，验证 hello 命令、web 路由、state 持久化都正常工作。M9.4 完成后停下来等你确认，再进 M9.5
+5. ✅ **M9.5 empty-app 参考模板 + 集成测试**已完成（28 集成测试 / 953 全量回归通过）
+   - `apps/empty-app/manifest.yaml`：最小 Manifest（capability=custom / permissions=[identity:context, ipfs:read, credit:balance]）
+   - `apps/empty-app/index.js`：start/stop hook 演示 SDK 4 大接口
+     - CLI：注册 `empty-app-hello --name <name>`，返回 `Hello, <name>! (from empty-app)` + 写入 state.lastGreeting
+     - Web：注册 `GET /api/apps/empty-app/hello`，返回 ok+app+version+greeting+lastGreeting+initializedAt
+     - State：start 时写 initializedAt + manifestName，autoFlush=true 自动写盘
+     - Credit：注册 onReceived handler，dispatchCreditMessage 时写 state.lastCreditReceived
+     - stop hook：调用 app.state.flush() 显式写盘
+   - `apps/empty-app/README.md`：App 开发文档（manifest 字段表 + start hook 签名 + 改造步骤 + 验证命令 + 约束）
+   - `test/empty-app.test.js`：28 个测试覆盖 App 加载 / CLI 命令 / Web 路由 / State 持久化往返 / Credit 派发 / stop hook / WebPanel 端到端 / manifest 校验
+6. **M9 阶段二完成** → 进入 M10 翻译市场（第一个真实 App，依赖 M9 SDK）
 
 ---
 
-**Last Updated**: M9.4 Web 面板路由扩展 + App API 已完成 · 全量回归 925/925 通过 · 下一步 M9.5 empty-app 参考模板 + 集成测试
+**Last Updated**: M9.5 empty-app 参考模板 + 集成测试已完成 · 全量回归 953/953 通过 · M9 阶段二（App SDK）全部完成 · 下一步 M10 翻译市场（第一个真实 App）

@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.4 Web 面板路由扩展 + App API 已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
+> 当前阶段：**M9.5 empty-app 参考模板 + 集成测试已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -302,6 +302,34 @@ M9 阶段二第四步：把 WebPanel 与 AppManager 接通。新增 `/apps/<appN
 
 ✅ 全量回归 925/925 通过（M9.3 后 901 + M9.4 新增 24 = 925，无 regression）
 
+### M9.5 empty-app 参考模板 + 集成测试
+
+M9 阶段二收尾：提供 `apps/empty-app/` 最小可运行 App 参考模板，演示 SDK 4 大接口（CLI / Web / State / Credit）的最小用法；端到端集成测试验证 App 加载→CLI 命令执行→Web 路由派发→State 持久化往返→Credit 消息派发→stop hook 的完整生命周期。这是 M9 阶段的"接口稳定性验证"——empty-app 用 SDK 4 大接口写完一个完整 App，证明 SDK 设计在 M10 翻译市场落地时不会反复重写。
+
+**核心交付**：
+
+- ✅ [apps/empty-app/manifest.yaml](apps/empty-app/manifest.yaml) — 最小 Manifest（capability=custom / permissions=[identity:context, ipfs:read, credit:balance] / dataDir=empty-app / contexts=[]）
+- ✅ [apps/empty-app/index.js](apps/empty-app/index.js) — start/stop hook 演示 4 大接口：
+  - **CLI 命令**：注册 `empty-app-hello --name <name>`，返回 `Hello, <name>! (from empty-app)`，同时写入 state.lastGreeting
+  - **Web 路由**：注册 `GET /api/apps/empty-app/hello`，返回 `{ ok, app, version, greeting, lastGreeting, initializedAt }`
+  - **State 持久化**：start 时写 `initializedAt` + `manifestName`；autoFlush=true 让 set/delete/clear 自动写盘
+  - **Credit 消息派发**：注册 `onReceived` handler，收到 credit 消息时写 state.lastCreditReceived
+  - **stop hook**：调用 `app.state.flush()` 显式写盘一次
+- ✅ [apps/empty-app/README.md](apps/empty-app/README.md) — App 开发文档（manifest 字段表 + start hook 签名 + 改造成自己 App 的步骤 + 验证命令 + 约束说明）
+
+**集成测试覆盖**（[test/empty-app.test.js](test/empty-app.test.js)，28 个测试）：
+
+- **App 加载**（3 个）：AppManager 扫描 apps/ 加载 empty-app / createApp 装配后含 7 大接口 / start hook 调用后 state 已初始化
+- **CLI 命令**（5 个）：注册 empty-app-hello / 执行默认返回 Hello, world! / 执行 --name Alice / handler 执行后 state.lastGreeting 已写入 / 未注册命令 execute 抛错
+- **Web 路由**（4 个）：注册 /api/apps/empty-app/hello / app.web.handle 返回 hello 响应 / 不存在子路径 404 / POST 返回 405（严格 GET-only）
+- **State 持久化**（4 个）：state.json 在 set 后写盘 / 重启后 state 完整恢复（round 1 写 → stop → round 2 重启 → load 恢复）/ state.delete 自动写盘 / state.clear 写盘为空对象
+- **Credit 消息派发**（4 个）：credit.onReceived handler 已注册（snode._creditHandlers 非空）/ dispatchCreditMessage 调用 handler 写入 state / targetApp 不匹配时不派发 / 无 targetApp 时不派发
+- **stop hook**（2 个）：app.stop 调用后 state.flush 写盘 / AppManager.stop 幂等（多次调用不抛错）
+- **端到端 WebPanel 集成**（4 个）：/api/apps 返回 empty-app / /api/apps/empty-app/hello 通过 WebPanel 派发 / /apps HTML 索引页含 empty-app 链接 / /api/status 含 apps.enabled=true
+- **manifest 校验**（2 个）：empty-app manifest.name 与目录名一致 / manifest 含必需字段
+
+✅ 全量回归 953/953 通过（M9.4 后 925 + M9.5 新增 28 = 953，无 regression）
+
 ### M1 双平面传输基线
 
 构建 Havix 节点的传输层骨架：libp2p 3.x + helia 7.x，TCP + noise E2E 加密 + yamux/mplex 多路复用。提供局域网 mDNS 自动发现与手动 multiaddr 跨网段引导两种邻居发现方式。KadDHT 默认 LAN 模式（`/ipfs/lan/kad/1.0.0`），与公网 IPFS Amino DHT 隔离；DHT 门控在协议层硬性拦截私域 CID 的 provide/findProviders 调用，抛 `PrivateCidRejectedError`，不依赖加密兜底。公共层订阅三个 gossipsub 频道（`/s-network/announce`、`/reputation`、`/alert`），心跳定时器每 30s 广播邻居列表，SIGINT/SIGTERM 优雅退出。
@@ -582,14 +610,24 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e + SDK，约 55 秒，共 925 个用例）
+# 全部测试（单元 + e2e + SDK，约 55 秒，共 953 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（925 个用例，全部通过）：
+测试覆盖（953 个用例，全部通过）：
+
+**M9.5 empty-app 参考模板集成阶段（28 个）**
+- App 加载（3 个）：AppManager 扫描加载 / 7 大接口装配 / start hook 初始化 state
+- CLI 命令（5 个）：注册 / 默认执行 / --name 参数 / state.lastGreeting 写入 / 未注册命令抛错
+- Web 路由（4 个）：注册 / handle 响应 / 404 / 405 严格 GET-only
+- State 持久化（4 个）：set 写盘 / 重启恢复 / delete 写盘 / clear 写空对象
+- Credit 消息派发（4 个）：handler 注册 / dispatch 调用 / targetApp 不匹配 / 无 targetApp
+- stop hook（2 个）：app.stop flush 写盘 / AppManager.stop 幂等
+- 端到端 WebPanel 集成（4 个）：/api/apps / /api/apps/empty-app/hello / /apps HTML 索引 / /api/status apps 字段
+- manifest 校验（2 个）：name 与目录名一致 / 必需字段
 
 **M9.4 WebPanel × AppManager 路由分发阶段（24 个）**
 - /api/apps 端点测试（3 个）：AppManager 启用+有 App 返回 ok:true+apps 列表 / 启用+无 App count=0 / 未启用 503
@@ -715,6 +753,11 @@ havix/
 │       ├── cli.js                 命令行 REPL（M8.2-1/2/3 已实现：tokenize/parseArgs + 43 个命令 = 7 诊断 + 11 M3-M4 + 25 M5-M7）
 │       ├── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化；M9.4：新增 /apps 与 /api/apps 路由分发到 AppManager）
 │       └── app-manager.js         App 容器管理器（M9.3：扫描 apps/ → manifest → createApp → 注入 Cli + 派发 credit 消息）
+├── apps/                          App 容器目录（M9.3 引入，由 AppManager 扫描加载）
+│   └── empty-app/                 参考模板（M9.5：最小可运行 App，演示 SDK 4 大接口）
+│       ├── manifest.yaml          App 声明（name/version/capability/permissions/entryPoint）
+│       ├── index.js               start/stop hook（注册 CLI 命令 + web 路由 + state + credit handler）
+│       └── README.md              App 开发文档（字段表 + 改造步骤 + 验证命令）
 ├── sdk/                           Havix SDK（M9.1 + M9.2 + M9.3 已实现）
 │   ├── index.js                   SDK 入口（导出 errors + permissions + manifest + 7 大子模块工厂 + createApp + createSnodeMock）
 │   ├── errors.js                  7 个 SDK 错误类型（HavixSdkError 基类 + 6 个子类）
@@ -794,6 +837,7 @@ havix/
 | M9.2 SDK 接口 | ✅ 已完成 | createApp 入口 + 7 大子模块（context/market/credit/wiki/tunnel/arbitration/transport）+ 4 辅助模块（ipfs/web/cli/state）+ mock SNode + 253 个 SDK 测试 |
 | M9.3 AppManager | ✅ 已完成 | src/app/app-manager.js（扫描 apps/ 加载 manifest + createApp 装配 + start hook + CLI 命令注入 + credit 消息派发）+ state.js 接入 persistence.js 写盘 + config --apps/--no-apps/--apps-dir + 52 个集成测试 |
 | M9.4 Web 路由扩展 | ✅ 已完成 | web-panel.js 接入 AppManager：/apps + /api/apps + /apps/<appName>/... 路由分发 + HTML 索引页 + 侧边栏 Apps 区块 + /api/status apps 字段 + 严格 GET-only + 503 降级 + 24 个集成测试 |
+| M9.5 empty-app | ✅ 已完成 | apps/empty-app/ 参考模板（manifest + index.js + README）+ 28 个集成测试覆盖 App 加载→CLI→Web→State 持久化往返→Credit 派发→stop hook 完整生命周期 + 端到端 WebPanel 集成 |
 
 ## 核心设计决策（M1 → M2 → M3 → M4 → M5 → M6 → M7 阶段递进）
 

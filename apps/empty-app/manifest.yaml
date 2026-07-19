@@ -1,0 +1,20 @@
+# Havix empty-app 参考模板
+# ───────────────────────────────────────────────
+# 最小可运行 App 模板：注册一个 hello 命令、一个 hello web 路由、一个 state 键。
+# 开发者照着改造成自己的 App。
+#
+# 字段说明详见 sdk/manifest.js 顶部注释。
+
+name: empty-app
+version: 1.0.0
+capability: custom
+permissions:
+  - identity:context
+  - ipfs:read
+  - credit:balance
+minReputation: 0
+trustWeight: 0.5
+dataDir: empty-app
+contexts: []
+description: 最小可运行 App 模板（M9.5）
+entryPoint: ./index.js
