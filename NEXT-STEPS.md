@@ -1,97 +1,90 @@
 # Havix 协议开发规划
 
-> 本文档定义 Havix 协议从当前阶段到完整形态的开发路径。
-> M1–M10 已完成的部分是协议的参考实现与验证工具，不是协议本身。
-> 从 M11 开始，Havix 协议进入实质构建阶段。
+> Havix 协议已存在并运行。
+> 当前形态（M1–M10）：MVP 协议层 + App SDK + 第一个 App（Embas 翻译市场）。
+> 这是 Havix，但不是完全体。
+> 本文档规划协议从当前形态到完整形态的进阶路径。
 >
 > 最近更新：2026-07-19
 
 ---
 
-## 一、Havix 协议定位
+## 一、Havix 协议
 
-Havix 是一个去中心化对等网络协议，目标是验证社会学论文《底层高认知者的结构性困境》提出的分层自组织网络假设。
+Havix 是去中心化对等网络协议，验证社会学论文《底层高认知者的结构性困境》提出的分层自组织网络假设。
 
 ### 协议要回答的问题
 
-1. **身份不可降级**：在多方协作中，个体能否保持多 context 子身份的独立性，不被强迫合并为单一身份
-2. **价值可闭环**：高认知个体的认知产出能否通过协议内信用体系完成价值闭环，不依赖外部法币通道
-3. **治理可问责**：在无中心仲裁者的情况下，违约行为能否被临时仲裁团处理，且裁决能自执行
-4. **边界可维护**：在观察者存在的前提下，私域协作空间能否维持可见性边界，不被强行穿透
-5. **角色可涌现**：在长跑稳定状态下，节点角色能否通过加权转换自然分化，而非外部指定
+1. **身份不可降级**：在多方协作中，个体能否保持多 context 子身份的独立性
+2. **价值可闭环**：高认知个体的认知产出能否通过协议内信用体系完成价值闭环
+3. **治理可问责**：在无中心仲裁者的情况下，违约行为能否被临时仲裁团处理并自执行
+4. **边界可维护**：在观察者存在的前提下，私域协作空间能否维持可见性边界
+5. **角色可涌现**：在长跑稳定状态下，节点角色能否通过加权转换自然分化
 
-### 协议不回答的问题
+### 当前形态（M1–M10 已交付）
 
-- 网络层的绝对匿名（这是 mixnet 的领域，Havix 集成而非重写）
+| 模块 | 实现 | 状态 |
+|---|---|---|
+| 身份层 | 4-context DID 派生 + Ed25519 签名 | ✅ 运行 |
+| 经济层 | Reputation / Credit 双账本 + Faucet + Slash | ✅ 运行 |
+| 协议层 | Vouch / Wiki / Market / Arbitration / Tunnel | ✅ 运行 |
+| 传输层 | libp2p + gossipsub + 单跳 relay + IPFS | ✅ 运行 |
+| 持久化 | 6 registry + nonce 集合，原子 JSON 落盘 | ✅ 运行 |
+| 治理 | 临时仲裁团 + 信誉 slash + Treasury 分账 | ✅ 运行 |
+| App SDK | Havix SDK（11 模块）+ Manifest 规范 | ✅ 运行 |
+| App 加载 | AppManager（manifest 扫描 + entryPoint 校验 + 路径穿越防护） | ✅ 运行 |
+| 参考 App | Embas 翻译市场（订单生命周期 + 仲裁 + escrow） | ✅ 运行 |
+| 安全加固 | M8 审计（6 P0 + 6 P1 + 3 P2）+ M9.6（6 项）+ AUDIT-M10（5 P0 + 15 P1） | ✅ 完成 |
+| 测试基线 | MVP 1021/1021 + Embas 213/213 = 1234/1234 | ✅ 通过 |
+
+### 协议的完全体
+
+当前形态在协议假设的完整验证上还有缺口：
+
+- **敌对环境验证**：需要网络层匿名（mixnet 集成）
+- **长跑稳定性**：需要运行时材料升级（Rust 实现）
+- **网络层不可观察**：需要 DID 与 peerId 解耦
+- **多 App 加权转换**：需要协议层加权机制与角色涌现算法
+- **开放生态**：需要 App 准入与审核流程
+
+这些缺口不否定当前形态——**当前形态已经是一个运行中的协议**。缺口是协议进阶的目标，不是协议成立的条件。
+
+### 不在协议范围内的事
+
+- 网络层的绝对匿名（mixnet 的领域，Havix 集成而非重写）
 - 链上治理代币与交易所经济（Havix 信用不可跨协议流通）
 - 替代任何现实法律或主权治理
 - 任何特定政治诉求的表达
 
-### 协议与参考实现的关系
-
-```
-┌──────────────────────────────────────────────┐
-│           Havix 协议规范（语言无关）           │
-│  身份派生规则 / 信用账本不变量 / 仲裁状态机 / │
-│  双平面隔离原则 / 加权转换算法                │
-└──────────────────┬───────────────────────────┘
-                   │ 参考实现
-┌──────────────────┴───────────────────────────┐
-│  JS 实现（M1–M10，当前）                       │
-│  Node.js + libp2p + @noble/curves + fs       │
-│  用途：验证协议业务逻辑、跑通端到端流程         │
-└──────────────────┬───────────────────────────┘
-                   │ 材料升级
-┌──────────────────┴───────────────────────────┐
-│  Rust 实现（M13+）                             │
-│  rust-libp2p + ed25519-dalek + lmdb          │
-│  + Nym mixnet transport 适配器                │
-│  用途：长跑稳定、敌对环境验证、生产部署        │
-└──────────────────────────────────────────────┘
-```
-
-**关键原则**：协议规范在参考实现之上，参考实现的局限不等于协议的局限。当 JS 实现无法验证某项协议假设时，应明确登记"该假设待 Rust 实现验证"，而非判定协议假设被证伪。
-
 ---
 
-## 二、阶段划分
-
-### M1–M10：参考实现与验证（已完成）
-
-| 阶段 | 主题 | 性质 |
-|---|---|---|
-| M1–M7 | 协议层 MVP：identity / credit / vouch / wiki / market / tunnel / arbitration | 协议能力的最小可运行实现 |
-| M8 | 持久化 + CLI 收口 + 4 节点集成测试 | 让参考实现能长跑 |
-| M8 审计 | 6 P0 + 6 P1 + 3 P2 修复 | 参考实现的密码学与健壮性回归 |
-| M9 | App SDK + Manifest 规范 | 把协议能力封装为 App 可调用接口 |
-| M9.5 | 空应用参考模板 | 最小 App 骨架 |
-| M9.6 | 安全加固第一步 | App 加载层路径穿越 / 跨 App 隔离 / 准入校验 |
-| M10 | 翻译市场 App Embas | 第一个端到端参考 App |
-| AUDIT-M10 | 5 P0 + 15 P1 修复（已完成）+ 32 P2（待处理） | 全栈安全加固 |
-
-**M1–M10 的产出本质**：一套协议参考实现，验证了协议的业务逻辑可走通。**这不是 Havix 协议本身**，是验证工具。
+## 二、协议进阶路径
 
 ### M11：多 App 共存与加权转换
 
-**目标**：在协议层验证加权转换假设（FW-01），让多个 App 共存于同一节点，节点角色通过 trustWeight 加权自然涌现。
+**目标**：让多个 App 共存于同一节点，节点角色通过 trustWeight 加权自然涌现。验证加权转换假设（FW-01）。
 
 #### 工作项
 
 | 编号 | 工作项 | 产出 |
 |---|---|---|
-| M11-1 | 第二个参考 App：教学市场（context-B 消费型 + 转账型） | 验证 SDK 在第二个 App 上的通用性 |
-| M11-2 | 第三个参考 App：维基编辑（context-D 签发型） | 验证多 context 共存 |
+| M11-1 | 第二个 App：教学市场（context-B 消费型 + 转账型） | 验证 SDK 在多 App 上的通用性 |
+| M11-2 | 第三个 App：维基编辑（context-D 签发型） | 验证多 context 共存 |
 | M11-3 | 加权转换协议 | 跨 App credit 流转 + trustWeight 加权记账 |
 | M11-4 | FW-01 自然涌现算法 v0 | 节点角色涌现的算法实现与仿真 |
 | M11-5 | 抽象接口预留（为 M13 Rust 化） | TransportAdapter / LedgerStorage / CryptoProvider / PubSubProvider 接口定义 |
 
-#### 协议假设验证目标
+#### 节点间攻击防护（M11 必修）
 
-| 假设 | M11 是否验证 | 备注 |
+| 防护 | 位置 | 防御对象 |
 |---|---|---|
-| 加权转换能涌现角色分工（FW-01） | ✅ | 业务逻辑层验证 |
-| 多 App 共存时 App 间隔离不破 | ✅ | 需 M11-1 / M11-2 / M11-3 共同验证 |
-| 仲裁 slash 在多 App 间不被滥用 | ✅ | 需配套 M11 节点间攻击防护 |
+| Rate limiting | `s-node.js` `_pubsubHandler` | 高频消息 CPU 耗尽 |
+| Sybil 防御加强 | `vouch.js` + `arbitration.js` | 慢速累积 vouch 入 panel |
+| Eclipse 攻击检测 | `network/dht.js` | DHT 邻居被控制 |
+| 仲裁员串谋统计检测 | `arbitration.js` | 间接串谋 |
+| 仲裁员中途退出惩罚 | `arbitration.js` + `timeouts.js` | 恶意 abstain 拖垮裁决 |
+| Front-running commit-reveal | `market.js` | 抢订单时序攻击 |
+| issue credit 反向审计 | `credit.js` | issuer 主动作恶 |
 
 ### M12：网络效应与 App 准入
 
@@ -107,12 +100,12 @@ Havix 是一个去中心化对等网络协议，目标是验证社会学论文�
 | M12-4 | App 生命周期管理 | 安装 / 升级 / 卸载 / 数据迁移 |
 | M12-5 | 第三方 App 沙箱执行 | 隔离第三方 App 对节点进程的影响 |
 
-#### 协议假设验证目标
+#### M12 必修安全项
 
-| 假设 | M12 是否验证 | 备注 |
-|---|---|---|
-| 开放准入下协议假设不崩 | ✅ | 需配套 M12 Sybil 防御强化 |
-| App 信任权重抗操纵 | ✅ | 需 M12-3 |
+| 防护 | 防御对象 |
+|---|---|
+| App 准入场景 Sybil 强化 | 第三方 App 注入恶意节点 |
+| vouch 质量加权 | 低质量 vouch 灌水 |
 
 ### M13：Rust 协议层实现
 
@@ -147,7 +140,7 @@ Havix 是一个去中心化对等网络协议，目标是验证社会学论文�
 |---|---|---|---|
 | M14-1 | Nym mixnet transport 适配器 | P0 | 第一个非 libp2p transport |
 | M14-2 | DID ↔ peerId 解耦 | P0 | 让 DID 在不暴露 peerId 的前提下通信 |
-| M14-3 | Eclipse 攻击防御 Rust 强化 | P0 | DHT 邻居多样性约束 |
+| M14-3 | Eclipse 攻击防御 Rust 强化 | P0 | DHT 邻居多样性硬约束 |
 | M14-4 | Katzenpost 适配器 | P1 | Nym 延迟不可接受时的备选 |
 | M14-5 | 跨网络联邦协议 | P2 | 多个 Havix 网络互联（FW-04） |
 
@@ -177,7 +170,7 @@ Havix 是一个去中心化对等网络协议，目标是验证社会学论文�
 
 ### 威胁谱系
 
-Havix 协议面对的威胁是连续的谱系，不是离散的两类：
+Havix 协议面对的威胁是连续的谱系：
 
 ```
 被动观察 → 流量分析 → 节点劫持 → Sybil 注入 → Eclipse 攻击 → BGP 劫持
@@ -185,7 +178,7 @@ Havix 协议面对的威胁是连续的谱系，不是离散的两类：
   弱            中           强           强            极强
 ```
 
-**设计原则**：威胁谱系上的每一级都必须有对应的协议层防御。当某一级防御缺失时，对应的协议假设无法被验证。
+**设计原则**：威胁谱系上的每一级都必须有对应的协议层防御。当某级防御缺失时，对应的协议假设无法被验证。
 
 ### 防御分层
 
@@ -193,13 +186,11 @@ Havix 协议面对的威胁是连续的谱系，不是离散的两类：
 |---|---|---|---|
 | 密码学层 | 消息篡改 / 伪造 / 重放 | ✅ 完成（M8 审计 + AUDIT-M10） | M1–M10 |
 | 行为过滤层 | DoS / 内存膨胀 / 路径穿越 | ✅ 完成（M9.6 + AUDIT-M10） | M9.6 + AUDIT-M10 |
-| 节点间攻击层 | Sybil / Eclipse / 串谋 / Front-running | ⏳ 部分缺失 | M11 / M12 |
-| 网络层匿名 | 流量分析 / 元数据泄露 | ❌ 缺失 | M14 |
+| 节点间攻击层 | Sybil / Eclipse / 串谋 / Front-running | ⏳ 部分完成，部分待 M11/M12 补齐 | M1–M10 + M11/M12 |
+| 网络层匿名 | 流量分析 / 元数据泄露 | ❌ 待 M14 | M14 |
 | 物理层防御 | BGP 劫持 / ISP 级观察 | ❌ 不在 Havix 范围 | 协议外 |
 
-### 节点间攻击防护清单
-
-#### 已完成（M1–M10）
+### 已完成的节点间攻击防护（M1–M10）
 
 | 防护 | 位置 | 防御对象 |
 |---|---|---|
@@ -212,62 +203,28 @@ Havix 协议面对的威胁是连续的谱系，不是离散的两类：
 | Set/Map LRU 100K 上限 | 多处 | 内存膨胀 |
 | 路径穿越校验 | `config.js` / `state.js` / `web.js` / `app-manager.js` | 任意文件读写 |
 | DID / CID JSON API 脱敏 | `Embas/src/web.js` | 身份画像泄露 |
-
-#### M11 必修
-
-| 防护 | 位置 | 防御对象 |
-|---|---|---|
-| Rate limiting | `s-node.js` `_pubsubHandler` | 高频消息 CPU 耗尽 |
-| Sybil 防御加强 | `vouch.js` + `arbitration.js` | 慢速累积 vouch 入 panel |
-| Eclipse 攻击检测 | `network/dht.js` | DHT 邻居被控制 |
-| 仲裁员串谋统计检测 | `arbitration.js` | 间接串谋（无 vouch 关联但合谋） |
-| 仲裁员中途退出惩罚 | `arbitration.js` + `timeouts.js` | 恶意 abstain 拖垮裁决 |
-| Front-running commit-reveal | `market.js` | 抢订单时序攻击 |
-| issue credit 反向审计 | `credit.js` | issuer 主动作恶 |
-
-#### M12 必修
-
-| 防护 | 位置 | 防御对象 |
-|---|---|---|
-| App 准入场景 Sybil 强化 | App 注册中心 | 第三方 App 注入恶意节点 |
-| vouch 质量加权 | `vouch.js` | 低质量 vouch 灌水 |
-
-#### M13 Rust 化必修
-
-| 防护 | 位置 | 防御对象 |
-|---|---|---|
-| Nym mixnet transport | `network/tunnel.js` 适配器 | 流量分析 |
-| DID ↔ peerId 解耦 | `s-node.js` + transport 层 | peerId 可观察建立 DID 映射 |
-| Eclipse 攻击 Rust 强化 | `network/dht.js` Rust 版 | DHT 邻居多样性硬约束 |
-
-#### M14+ 暂不处理
-
-| 防护 | 说明 |
-|---|---|
-| Katzenpost 适配器 | Nym 备选方案，延迟不可接受时启用 |
-| 多跳 onion transport | 协议假设验证不依赖此项 |
+| 自动 abstain 查询已投票 | `Embas/src/timeouts.js` | 覆盖人工投票 |
+| escrow mutex + 截断守卫 | `Embas/src/credit-adapter.js` | 双重扣款 / race / 截断 |
 
 ---
 
 ## 四、假设验证覆盖度
 
-### 当前覆盖度（M1–M10 完成后）
-
-| 协议假设 | JS 实现验证状态 | 完整验证条件 |
+| 协议假设 | 当前验证状态 | 完整验证条件 |
 |---|---|---|
 | 加权转换涌现角色分工（FW-01） | ⏳ 待 M11 | 不依赖网络层，M11 可完整验证 |
 | 多 App 共存时 App 间隔离 | ⏳ 待 M11 | 不依赖网络层，M11 可完整验证 |
-| 仲裁 slash 防滥用 | ⚠️ 部分验证 | M11 加串谋统计检测后完整 |
+| 仲裁 slash 防滥用 | ⚠️ 部分验证（防直接串谋） | M11 加串谋统计检测后完整 |
 | 私域市场双重加密防冒充 | ✅ 已验证 | 不依赖网络层 |
 | 身份不可降级（context 独立性） | ⚠️ 部分验证 | M14 DID↔peerId 解耦后完整 |
 | 信誉不可降级 | ⚠️ 部分验证 | M11 Sybil 防御 + M14 mixnet 后完整 |
-| 边界可维护（敌对环境下） | ❌ 无法验证 | M14 mixnet + DID 解耦后 |
-| 长跑稳定性 | ❌ 无法验证 | M13 Rust 实现后 |
+| 边界可维护（敌对环境下） | ❌ 待 M14 | M14 mixnet + DID 解耦后 |
+| 长跑稳定性 | ❌ 待 M13 | M13 Rust 实现后 |
 
 ### 验证原则
 
-1. **JS 实现的局限不等于协议假设的局限**：当 JS 实现无法验证某项假设时，登记为"待 M13/M14 验证"，不判定协议假设被证伪
-2. **协议假设验证需要完整的威胁谱系防御**：敌对环境验证必须在 M11 节点间攻击防护 + M14 网络层匿名都完成后才能进行
+1. **当前形态是 Havix 协议的真实运行**：M1–M10 已完成的验证是协议成立的有效证据，不是"参考实现的玩具测试"
+2. **缺口的含义是"待补齐"，不是"未达成"**：敌对环境与长跑稳定性的验证待后续阶段完成，但当前形态在友善环境下的协议假设验证是有效的
 3. **内测反馈的解读**：如内测中出现"假设不成立"的结论，需先确认是否因防御缺失导致，而非协议假设本身缺陷
 
 ---
@@ -297,9 +254,9 @@ interface TransportAdapter {
 }
 ```
 
-**默认实现**：libp2p relay（M1–M10 现状）
-**M14 实现**：Nym mixnet 适配器
-**M14+ 实现**：Katzenpost 适配器
+- **当前实现**：libp2p relay（M1–M10 已运行）
+- **M14 实现**：Nym mixnet 适配器
+- **M14+ 实现**：Katzenpost 适配器
 
 ### LedgerStorage
 
@@ -319,59 +276,39 @@ interface LedgerStorage {
 }
 ```
 
-**默认实现**：Node.js fs + JSON（M1–M10 现状）
-**M13 实现**：lmdb / sled
+- **当前实现**：Node.js fs + JSON（M1–M10 已运行）
+- **M13 实现**：lmdb / sled
 
 ### CryptoProvider
 
 ```typescript
 interface CryptoProvider {
-  // Ed25519 签名
   sign(privateKey: PrivateKey, message: Uint8Array): Promise<Signature>
-
-  // Ed25519 验签
   verify(publicKey: PublicKey, message: Uint8Array, signature: Signature): Promise<boolean>
-
-  // AES-GCM 加密
   encrypt(key: SymmetricKey, plaintext: Uint8Array): Promise<Ciphertext>
-
-  // AES-GCM 解密
   decrypt(key: SymmetricKey, ciphertext: Ciphertext): Promise<Uint8Array>
-
-  // SHA-256 哈希
   hash(data: Uint8Array): Hash
-
-  // 随机数生成
   randomBytes(length: number): Uint8Array
 }
 ```
 
-**默认实现**：`@noble/curves` + `@noble/hashes` + node:crypto（M1–M10 现状）
-**M13 实现**：`ed25519-dalek` + `aes-gcm` + `sha2` + `rand_core`
+- **当前实现**：`@noble/curves` + `@noble/hashes` + node:crypto（M1–M10 已运行）
+- **M13 实现**：`ed25519-dalek` + `aes-gcm` + `sha2` + `rand_core`
 
 ### PubSubProvider
 
 ```typescript
 interface PubSubProvider {
-  // 订阅 topic
   subscribe(topic: Topic): Promise<void>
-
-  // 取消订阅
   unsubscribe(topic: Topic): Promise<void>
-
-  // 发布消息
   publish(topic: Topic, message: Uint8Array): Promise<void>
-
-  // 注册消息处理器
   onMessage(handler: (event: PubSubEvent) => void): void
-
-  // 获取 mesh 对等节点
   getMeshPeers(topic: Topic): Promise<Peer[]>
 }
 ```
 
-**默认实现**：libp2p gossipsub（M1–M10 现状）
-**M13 实现**：rust-libp2p gossipsub
+- **当前实现**：libp2p gossipsub（M1–M10 已运行）
+- **M13 实现**：rust-libp2p gossipsub
 
 ---
 
@@ -383,7 +320,7 @@ interface PubSubProvider {
 
 - **M11 阶段**：按需穿插处理与多 App 相关的 P2
 - **M12 阶段**：处理与审核机制相关的 P2
-- **M13 Rust 化**：大部分 P2 自然消失（如 JS 特有的类型检查、fs IO 阻塞等）
+- **M13 Rust 化**：部分 P2 自然消失（如 JS 特有的类型检查、fs IO 阻塞等）
 
 ### JS 实现层债务（M13 Rust 化时清偿）
 
@@ -412,7 +349,7 @@ interface PubSubProvider {
 ### 内测反馈的解读约束
 
 1. **不能因 JS 实现的局限判定协议假设被证伪**：如反馈涉及敌对环境、长跑稳定性、网络层观察，需先确认是否因防御缺失导致
-2. **不能因单次跑测失败判定协议设计错误**：需区分"协议设计问题"与"参考实现 bug"
+2. **不能因单次跑测失败判定协议设计错误**：需区分"协议设计问题"与"实现 bug"
 3. **设计层质疑需进入协议规范讨论**：不在内测期做决定，登记后等 M11 设计阶段处理
 
 ---
@@ -431,9 +368,9 @@ Nym / Katzenpost / Loopix 已解决网络层匿名性。Havix 集成而非重写
 
 替代方案：通过 TransportAdapter 抽象让 mixnet 可插拔，M14 实现 Nym 适配器作为第一个非 libp2p transport。
 
-### 决策 3：协议规范与参考实现分离
+### 决策 3：协议规范与多语言实现分离
 
-协议规范是语言无关的，参考实现的局限不等于协议的局限。JS 实现无法验证的协议假设，登记为"待 Rust 实现验证"，不判定协议假设被证伪。
+协议规范是语言无关的。JS 实现是 Havix 协议的真实实现，Rust 实现也是。两种实现需通过等价测试与跨实现互操作验证一致性。JS 实现的局限是材料局限，不是协议局限。
 
 ### 决策 4：节点间攻击防护是 M11 必修项
 
@@ -484,4 +421,4 @@ P2 是可维护性 / 性能 / 文档类，不影响协议设计验证。在 M11�
 
 ---
 
-*本文档定义 Havix 协议从参考实现到完整形态的工程路径。各阶段工作项的具体设计文档在各阶段启动时单独起草。*
+*本文档定义 Havix 协议从当前形态到完全体的进阶路径。当前形态已运行，后续阶段补齐协议假设的完整验证边界。*
