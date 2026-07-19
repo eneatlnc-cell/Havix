@@ -88,6 +88,12 @@ export class ReputationLedger {
 
     /** @type {Map<string, {available: number, frozen: number}>} */
     this.balances = new Map()
+
+    // P1-3 修复：issuerDid → 公钥绑定 Map（防伪造 note 时旋转 keypair）
+    //   - first-seen wins：首次见到 issuerDid 签的 note 时登记其公钥
+    //   - 后续必须用同一公钥签，否则拒绝
+    /** @type {Map<string, string>} did → base64 publicKey */
+    this._issuerPubKeys = new Map()
   }
 
   /**
@@ -99,6 +105,8 @@ export class ReputationLedger {
       version: 'reputation-v1',
       initialReputation: this.initialReputation,
       balances: mapToArray(this.balances),
+      // P1-3 修复：持久化 issuerDid → pubKey 绑定
+      issuerPubKeys: mapToArray(this._issuerPubKeys),
     }
   }
 
@@ -117,6 +125,61 @@ export class ReputationLedger {
         this.balances.set(did, { available: info.available, frozen: info.frozen })
       }
     }
+    // P1-3 修复：恢复 issuerPubKeys 绑定
+    const pubArr = Array.isArray(json.issuerPubKeys) ? json.issuerPubKeys : []
+    for (const [did, pubKey] of pubArr) {
+      if (typeof did === 'string' && typeof pubKey === 'string') {
+        this._issuerPubKeys.set(did, pubKey)
+      }
+    }
+  }
+
+  /**
+   * P1-3 修复：登记某 issuerDid 的公钥（first-seen wins）。
+   *
+   * 策略：
+   *   - 首次见到 issuerDid 时登记其公钥
+   *   - 后续必须用同一公钥签 note，否则 note 视为伪造
+   *   - 防止攻击者获取 issuerDid 后用新 keypair 签 issue note
+   *     （即"旋转 keypair 攻击"）
+   *
+   * @param {string} did issuerDid
+   * @param {string} pubKey base64 编码的公钥
+   * @returns {{ registered: boolean, pubKey: string, conflict?: string }}
+   *   registered=true 表示新登记或匹配已有
+   *   registered=false 表示与已登记公钥冲突（调用方应拒绝该 note）
+   */
+  registerIssuerPubKey(did, pubKey) {
+    if (typeof did !== 'string' || did.length === 0) {
+      throw new Error('did 必须是非空字符串')
+    }
+    if (typeof pubKey !== 'string' || pubKey.length === 0) {
+      throw new Error('pubKey 必须是非空字符串')
+    }
+    const existing = this._issuerPubKeys.get(did)
+    if (existing === undefined) {
+      this._issuerPubKeys.set(did, pubKey)
+      this._persist()
+      this.log('info', 'rep',
+        `登记 issuer ${did.slice(0, 16)}... 公钥（首次绑定，P1-3）`)
+      return { registered: true, pubKey }
+    }
+    if (existing !== pubKey) {
+      // 冲突：issuerDid 已绑定到不同公钥
+      this.log('warn', 'rep',
+        `issuer ${did.slice(0, 16)}... 公钥冲突：已登记 ${existing.slice(0, 16)}... 但新 note 用 ${pubKey.slice(0, 16)}...，拒绝（P1-3）`)
+      return { registered: false, pubKey: existing, conflict: pubKey }
+    }
+    return { registered: true, pubKey }
+  }
+
+  /**
+   * P1-3 修复：取某 issuerDid 已登记的公钥。
+   * @param {string} did
+   * @returns {string | undefined} 已登记的 base64 公钥，未登记时 undefined
+   */
+  getIssuerPubKey(did) {
+    return this._issuerPubKeys.get(did)
   }
 
   /**
@@ -139,6 +202,14 @@ export class ReputationLedger {
 
   /**
    * 取某 did 的信誉三元组（不存在则按初始值创建）。
+   *
+   * P1-4 修复：懒创建只更新内存，不触发 _persist()。
+   *   - 高频读路径不应触发磁盘 IO 阻塞事件循环
+   *   - 调用方在 mutation（freeze/release/slash/credit）时会持久化，
+   *     届时该 did 的初始化记录会一并落盘
+   *   - 纯只读的 did（get 后无 mutation）丢失不损失任何业务数据：
+   *     初始值每次启动都能用 initialReputation 重算出来
+   *
    * @param {string} did
    * @returns {{available: number, frozen: number, total: number}}
    */
@@ -147,8 +218,7 @@ export class ReputationLedger {
     if (!b) {
       b = { available: this.initialReputation, frozen: 0 }
       this.balances.set(did, b)
-      // 懒创建也持久化，确保重启后能保留"已知 did"集合
-      this._persist()
+      // P1-4 修复：不调用 _persist()——懒创建只更新内存
     }
     return { ...b, total: b.available + b.frozen }
   }

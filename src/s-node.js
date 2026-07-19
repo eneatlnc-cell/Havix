@@ -1452,6 +1452,23 @@ export class SNode {
       return { applied: false, reason: `note 内层签名验证失败：${sigCheck.error ?? '签名不匹配'}` }
     }
 
+    // P1-3 修复：note.signerPublicKey 与 issuerDid 密码学绑定
+    //   - verifyCreditNoteSignature 仅校验"签名 vs signerPublicKey 自洽"，
+    //     不校验"signerPublicKey 真正属于 issuerDid"
+    //   - 攻击者可生成新 keypair 签 issue note，绕过身份验证
+    //   - 修复：用 ReputationLedger 维护 issuerDid → pubKey 绑定（first-seen wins）
+    if (this.reputationLedger && typeof this.reputationLedger.registerIssuerPubKey === 'function') {
+      const result = this.reputationLedger.registerIssuerPubKey(note.issuerDid, note.signerPublicKey)
+      if (!result.registered) {
+        this.log('warn', 'credit',
+          `note.signerPublicKey 与已登记公钥冲突（issuer=${note.issuerDid.slice(0, 12)}...），拒绝（P1-3）`)
+        return {
+          applied: false,
+          reason: 'note.signerPublicKey 与 issuerDid 已绑定公钥冲突（P1-3 修复）',
+        }
+      }
+    }
+
     // 幂等：按 nonce 去重
     if (this._processedCreditNonces.has(note.nonce)) {
       return { applied: false, reason: 'credit 已处理过（幂等）' }

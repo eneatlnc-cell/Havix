@@ -121,6 +121,19 @@ export class DisputeAlreadyResolvedError extends Error {
   }
 }
 
+export class DisputeNotInVotingStateError extends Error {
+  constructor({ disputeId, status, expected }) {
+    super(
+      `dispute ${disputeId} 状态 ${status} 不允许投票，预期 ${expected.join(' / ')}（P1-2 修复）`,
+    )
+    this.name = 'DisputeNotInVotingStateError'
+    this.code = 'DISPUTE_NOT_IN_VOTING_STATE'
+    this.disputeId = disputeId
+    this.status = status
+    this.expected = expected
+  }
+}
+
 // ──────────────────────────────────────────────
 // TreasuryLedger：金库账本（M6 暂只进不出）
 // ──────────────────────────────────────────────
@@ -634,6 +647,18 @@ export class ArbitrationRegistry {
 
     if (dispute.status === DISPUTE_STATUS.RESOLVED) {
       throw new DisputeAlreadyResolvedError({ disputeId })
+    }
+
+    // P1-2 修复：castVote 入口状态校验
+    //   只允许 PANEL_FORMED / VOTING 状态投票；PENDING（仲裁团未召集）与
+    //   EXPIRED（超时未达成裁决）状态拒绝投票，保护状态机一致性。
+    if (dispute.status !== DISPUTE_STATUS.PANEL_FORMED
+        && dispute.status !== DISPUTE_STATUS.VOTING) {
+      throw new DisputeNotInVotingStateError({
+        disputeId,
+        status: dispute.status,
+        expected: [DISPUTE_STATUS.PANEL_FORMED, DISPUTE_STATUS.VOTING],
+      })
     }
 
     const validVotes = [VERDICT_VOTE.GUILTY, VERDICT_VOTE.NOT_GUILTY, VERDICT_VOTE.ABSTAIN]

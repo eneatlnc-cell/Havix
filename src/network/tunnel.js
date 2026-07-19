@@ -42,6 +42,11 @@
 // 默认并行 relay 数（白皮书 §7.2：3 条）
 export const DEFAULT_PARALLEL_RELAYS = 3
 
+// P1-5 修复：单个 chunk 大小上限（64 KiB），防恶意对端塞超大 chunk 触发 OOM
+//   - 与 libp2p / gRPC / WebSocket 默认 frame 上限同量级
+//   - 应用层若需传输大文件，应自己切片 + 重组，不应依赖单 chunk 携带
+export const MAX_CHUNK_SIZE = 64 * 1024
+
 // 链路状态
 export const LINK_STATUS = Object.freeze({
   ACTIVE: 'active',       // 链路在线
@@ -66,6 +71,19 @@ export class NoRelayAvailableError extends Error {
     this.name = 'NoRelayAvailableError'
     this.code = 'NO_RELAY_AVAILABLE'
     this.tunnelId = tunnelId
+  }
+}
+
+export class ChunkTooLargeError extends Error {
+  constructor({ tunnelId, size, max }) {
+    super(
+      `隧道 ${tunnelId} 拒绝超大 chunk：size=${size} > max=${max}（P1-5 修复，防 OOM）`,
+    )
+    this.name = 'ChunkTooLargeError'
+    this.code = 'CHUNK_TOO_LARGE'
+    this.tunnelId = tunnelId
+    this.size = size
+    this.max = max
   }
 }
 
@@ -151,6 +169,14 @@ export class Tunnel {
   sendChunk(chunk) {
     if (!(chunk instanceof Uint8Array)) {
       throw new Error('chunk 必须是 Uint8Array')
+    }
+    // P1-5 修复：拒绝超大 chunk（防恶意对端塞 1GB chunk 触发 OOM）
+    if (chunk.byteLength > MAX_CHUNK_SIZE) {
+      throw new ChunkTooLargeError({
+        tunnelId: this.tunnelId,
+        size: chunk.byteLength,
+        max: MAX_CHUNK_SIZE,
+      })
     }
     if (this.activeRelays.length === 0) {
       throw new TunnelBrokenError({

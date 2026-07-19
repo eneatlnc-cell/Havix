@@ -14,6 +14,37 @@
 import process from 'node:process'
 
 /**
+ * 校验路径不允许绝对路径 / Windows 盘符 / `..` 路径穿越（P1-1 修复）。
+ *
+ * 与 sdk/manifest.js 的 validateDataDir 等价，但分层隔离（MVP 协议层不依赖 SDK）。
+ * 用于 --data-dir / --apps-dir 输入校验，防止 ledger 写到任意目录
+ * 或 AppManager 加载任意路径 JS。
+ *
+ * @param {string} value 待校验路径
+ * @param {string} name 字段名（仅用于错误信息）
+ * @returns {string} 校验通过的路径
+ * @throws {Error} 路径非法
+ */
+function validatePathInput(value, name) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${name} 必须是非空字符串`)
+  }
+  // 拒绝 Linux 绝对路径 / Windows 盘符
+  if (value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)) {
+    throw new Error(
+      `${name} 必须是相对路径（不允许绝对路径），实际: "${value}"`,
+    )
+  }
+  // 拒绝 `..` 路径穿越（含 a/../../b 等嵌套形式）
+  if (value.includes('..')) {
+    throw new Error(
+      `${name} 不允许包含 ".." 路径穿越，实际: "${value}"`,
+    )
+  }
+  return value
+}
+
+/**
  * 默认配置。任何未在环境变量/命令行中显式设置的项都会回退到这里。
  */
 export const DEFAULT_CONFIG = {
@@ -286,6 +317,13 @@ export function loadConfig() {
       `   如需远程访问，建议通过 SSH 隧道或反向代理（带认证）转发到 127.0.0.1:${config.webPort}。\n`
     )
   }
+
+  // P1-1 修复：--data-dir / --apps-dir 路径穿越校验
+  //   - 拒绝绝对路径（Linux `/` 或 Windows `C:\`）
+  //   - 拒绝含 `..` 的路径穿越
+  //   - 防止 ledger 写入任意目录 + AppManager 加载任意路径 JS
+  validatePathInput(config.dataDir, '--data-dir / HAVIX_DATA_DIR')
+  validatePathInput(config.appsDir, '--apps-dir / HAVIX_APPS_DIR')
 
   return config
 }
