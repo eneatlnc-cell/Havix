@@ -1,316 +1,481 @@
-# Havix 下一步开发规划日志
+# Havix 协议开发规划
 
-> 记录时间：2026-07-19
-> 触发点：M10 翻译市场端到端跑通 + AUDIT-M10 全栈安全加固完成，进入内测阶段
-> 用途：内测结束后启动 M11 的参考依据
-> 测试基线：MVP 1021/1021 + Embas 213/213 = 1234/1234
-> Git 状态：主仓库 `456ea2a` / Embas `0353920`（都已 push 到 main）
-
----
-
-## 0. 当前里程碑快照
-
-### 已完成
-
-| 阶段 | 主题 | 关键产出 | 测试 |
-|---|---|---|---|
-| M1-M7 | MVP 协议层 | identity / credit / vouch / wiki / market / tunnel / arbitration / 持久化 | 集成基线 |
-| M8.x | 信誉账本持久化 + CLI 收口 + 4 节点集成 | 6 registry 持久化 + 原子 saveJson + start() 失败回滚 | - |
-| M8 审计 | 6 P0 + 6 P1 + 3 P2 | 签名覆盖 canonical message / note 内层验签 / topic 分流 / InviteToken.verifySelf / gossipsub try-catch / slash 0 守卫 | 15 项 |
-| M9 | App SDK + Manifest 规范 | Havix SDK（11 模块）+ AppManifest 校验 + 参考模板 | - |
-| M9.5 | 空应用参考模板 | apps/empty-app（最小可运行 App） | 集成测试 |
-| M9.6 | 安全加固第一步 | 6 项立即修复（state/AppManager/web.mount/跨 App/issueInvite/仲裁） | 27 项 |
-| M10 | 第一个参考 App：翻译市场 Embas | 订单生命周期 + 仲裁适配器 + escrow + DID 脱敏 | Embas 213 |
-| AUDIT-M10 | 全栈审计 | 5 P0 + 15 P1（全部修复）+ 32 P2（未修复） | 41 项新增 |
-
-### 未完成（明确债务）
-
-- **AUDIT-M10 P2 共 32 项**：可维护性 / 性能 / 文档类，未修复。建议在 M11 阶段按需穿插处理，不阻断主线。
-- **JS 实现层脆弱性**：libp2p peerId↔DID 绑定暴露、无 mixnet 防流量分析、单线程 GC 抖动、Node.js fs IO 阻塞事件循环——这些是**材料问题，不是补 P2 修复能解决**的，必须 M13+ Rust 化。
-- **网络层隐私缺失**：当前 transport 走 libp2p relay，抗 ISP 级观察但抗不了全球流量分析。需要 Nym/Katzenpost 作为可插拔底层。
+> 本文档定义 Havix 协议从当前阶段到完整形态的开发路径。
+> M1–M10 已完成的部分是协议的参考实现与验证工具，不是协议本身。
+> 从 M11 开始，Havix 协议进入实质构建阶段。
+>
+> 最近更新：2026-07-19
 
 ---
 
-## 1. 内测阶段（当前 → M11 启动前）
+## 一、Havix 协议定位
 
-### 1.1 内测关注点
+Havix 是一个去中心化对等网络协议，目标是验证社会学论文《底层高认知者的结构性困境》提出的分层自组织网络假设。
 
-按三份说明文件验证：
+### 协议要回答的问题
 
-1. [README.md](./README.md) —— 项目概览与已交付能力
-2. [DEPLOY.md](./DEPLOY.md) —— 部署运行说明
-3. [sdk/USAGE.md](./sdk/USAGE.md) + [Embas/USAGE.md](./Embas/USAGE.md) —— SDK 与 App 使用说明
+1. **身份不可降级**：在多方协作中，个体能否保持多 context 子身份的独立性，不被强迫合并为单一身份
+2. **价值可闭环**：高认知个体的认知产出能否通过协议内信用体系完成价值闭环，不依赖外部法币通道
+3. **治理可问责**：在无中心仲裁者的情况下，违约行为能否被临时仲裁团处理，且裁决能自执行
+4. **边界可维护**：在观察者存在的前提下，私域协作空间能否维持可见性边界，不被强行穿透
+5. **角色可涌现**：在长跑稳定状态下，节点角色能否通过加权转换自然分化，而非外部指定
 
-### 1.2 可能暴露的问题类型
+### 协议不回答的问题
 
-- **运行时**：libp2p / Helia / IPFS 节点连接问题 → 检查 bootstrap + 防火墙
-- **业务流程**：Embas 翻译订单 / 仲裁 / 信誉扣款链路 → 检查 [Embas/M10-DESIGN.md](./Embas/M10-DESIGN.md)
-- **持久化**：节点重启后状态恢复 → 检查 `.data/` 目录权限与原子写
-- **App 加载**：manifest.yaml 格式 / entryPoint 路径 → 检查 [sdk/manifest.js](./sdk/manifest.js)
-- **长跑稳定性**：内存膨胀（Set/Map LRU 上限已做，但需要 24h+ 真实跑测验证）
-- **多节点共识**：4 节点拓扑下的消息顺序与最终一致性
+- 网络层的绝对匿名（这是 mixnet 的领域，Havix 集成而非重写）
+- 链上治理代币与交易所经济（Havix 信用不可跨协议流通）
+- 替代任何现实法律或主权治理
+- 任何特定政治诉求的表达
 
-### 1.3 内测反馈的处理原则
+### 协议与参考实现的关系
 
-- **P0 级（阻断内测）**：立即修，按 AUDIT-M10 P0 修复模式（修复 + 回归测试 + 当天 commit）
-- **P1 级（影响功能但不阻断）**：登记到 AUDIT-M11，M11 启动时优先处理
-- **P2 级（体验/文档）**：登记到 AUDIT-M11，按需穿插
-- **设计层质疑**：单独开 issue，需要协议设计讨论，不在内测期决定
+```
+┌──────────────────────────────────────────────┐
+│           Havix 协议规范（语言无关）           │
+│  身份派生规则 / 信用账本不变量 / 仲裁状态机 / │
+│  双平面隔离原则 / 加权转换算法                │
+└──────────────────┬───────────────────────────┘
+                   │ 参考实现
+┌──────────────────┴───────────────────────────┐
+│  JS 实现（M1–M10，当前）                       │
+│  Node.js + libp2p + @noble/curves + fs       │
+│  用途：验证协议业务逻辑、跑通端到端流程         │
+└──────────────────┬───────────────────────────┘
+                   │ 材料升级
+┌──────────────────┴───────────────────────────┐
+│  Rust 实现（M13+）                             │
+│  rust-libp2p + ed25519-dalek + lmdb          │
+│  + Nym mixnet transport 适配器                │
+│  用途：长跑稳定、敌对环境验证、生产部署        │
+└──────────────────────────────────────────────┘
+```
+
+**关键原则**：协议规范在参考实现之上，参考实现的局限不等于协议的局限。当 JS 实现无法验证某项协议假设时，应明确登记"该假设待 Rust 实现验证"，而非判定协议假设被证伪。
 
 ---
 
-## 2. M11：多 App 并存 + 加权转换
+## 二、阶段划分
 
-### 2.1 主线目标
+### M1–M10：参考实现与验证（已完成）
 
-对齐 [ROADMAP.md](./ROADMAP.md) §M11 与白皮书 §8.3「加权转换」、FW-01「自然涌现算法 v0」。
-
-| 工作项 | 描述 | 依赖 |
+| 阶段 | 主题 | 性质 |
 |---|---|---|
-| 教学市场 App（context-B 消费型） | 第二个参考 App，验证 SDK 通用性 | Embas 经验 |
-| 维基 App（context-D 签发型） | 第三个参考 App，验证多 context 共存 | - |
-| 加权转换协议 | 跨 App credit 流转 + trustWeight 加权 | 3 个 App 跑通 |
-| FW-01 自然涌现算法 v0 | 节点角色自然涌现（观察者/参与者/中继） | 加权转换协议 |
+| M1–M7 | 协议层 MVP：identity / credit / vouch / wiki / market / tunnel / arbitration | 协议能力的最小可运行实现 |
+| M8 | 持久化 + CLI 收口 + 4 节点集成测试 | 让参考实现能长跑 |
+| M8 审计 | 6 P0 + 6 P1 + 3 P2 修复 | 参考实现的密码学与健壮性回归 |
+| M9 | App SDK + Manifest 规范 | 把协议能力封装为 App 可调用接口 |
+| M9.5 | 空应用参考模板 | 最小 App 骨架 |
+| M9.6 | 安全加固第一步 | App 加载层路径穿越 / 跨 App 隔离 / 准入校验 |
+| M10 | 翻译市场 App Embas | 第一个端到端参考 App |
+| AUDIT-M10 | 5 P0 + 15 P1 修复（已完成）+ 32 P2（待处理） | 全栈安全加固 |
 
-### 2.2 M11 的"防脆弱"准备（不做 Rust，但要留接口）
+**M1–M10 的产出本质**：一套协议参考实现，验证了协议的业务逻辑可走通。**这不是 Havix 协议本身**，是验证工具。
 
-M11 不启动 Rust 重写，但**所有新增协议代码必须为 M13+ Rust 化留接口**。原则：业务层不直接依赖 Node.js fs / `@noble/curves` / libp2p，而是通过抽象层。
+### M11：多 App 共存与加权转换
 
-| 抽象层 | 位置 | 现状 | M11 动作 |
+**目标**：在协议层验证加权转换假设（FW-01），让多个 App 共存于同一节点，节点角色通过 trustWeight 加权自然涌现。
+
+#### 工作项
+
+| 编号 | 工作项 | 产出 |
+|---|---|---|
+| M11-1 | 第二个参考 App：教学市场（context-B 消费型 + 转账型） | 验证 SDK 在第二个 App 上的通用性 |
+| M11-2 | 第三个参考 App：维基编辑（context-D 签发型） | 验证多 context 共存 |
+| M11-3 | 加权转换协议 | 跨 App credit 流转 + trustWeight 加权记账 |
+| M11-4 | FW-01 自然涌现算法 v0 | 节点角色涌现的算法实现与仿真 |
+| M11-5 | 抽象接口预留（为 M13 Rust 化） | TransportAdapter / LedgerStorage / CryptoProvider / PubSubProvider 接口定义 |
+
+#### 协议假设验证目标
+
+| 假设 | M11 是否验证 | 备注 |
+|---|---|---|
+| 加权转换能涌现角色分工（FW-01） | ✅ | 业务逻辑层验证 |
+| 多 App 共存时 App 间隔离不破 | ✅ | 需 M11-1 / M11-2 / M11-3 共同验证 |
+| 仲裁 slash 在多 App 间不被滥用 | ✅ | 需配套 M11 节点间攻击防护 |
+
+### M12：网络效应与 App 准入
+
+**目标**：建立 App 注册中心与第三方 App 准入流程，让 Havix 从"内置 App 协议"过渡到"开放生态协议"。
+
+#### 工作项
+
+| 编号 | 工作项 | 产出 |
+|---|---|---|
+| M12-1 | App 注册中心 | 全局 App 目录 + 版本管理 + 跨节点同步 |
+| M12-2 | Manifest 审核流程 | 第三方 App 准入机制（白皮书 §8.4） |
+| M12-3 | App 信任权重动态调整 | trustWeight 根据历史表现调整 |
+| M12-4 | App 生命周期管理 | 安装 / 升级 / 卸载 / 数据迁移 |
+| M12-5 | 第三方 App 沙箱执行 | 隔离第三方 App 对节点进程的影响 |
+
+#### 协议假设验证目标
+
+| 假设 | M12 是否验证 | 备注 |
+|---|---|---|
+| 开放准入下协议假设不崩 | ✅ | 需配套 M12 Sybil 防御强化 |
+| App 信任权重抗操纵 | ✅ | 需 M12-3 |
+
+### M13：Rust 协议层实现
+
+**目标**：将 Havix 协议核心用 Rust 重新实现，作为长跑稳定与敌对环境验证的基础。
+
+#### 工作项
+
+| 编号 | 工作项 | 优先级 | 说明 |
 |---|---|---|---|
-| `TransportAdapter` | `network/tunnel.js` | 直接耦合 libp2p relay | 留接口，默认实现保持现状 |
-| `LedgerStorage` | `protocol/credit.js` / `arbitration.js` | 直接耦合 fs + JSON | 留接口，默认实现保持现状 |
-| `CryptoProvider` | `identity.js` | 直接耦合 `@noble/curves` | 留接口，默认实现保持现状 |
-| `PubSubProvider` | `s-node.js` | 直接耦合 libp2p gossipsub | 留接口，默认实现保持现状 |
+| M13-1 | credit / reputation ledger Rust 移植 | P0 | 加权转换核心，最先移植 |
+| M13-2 | arbitration Rust 移植 | P0 | 长跑稳定性要求最高 |
+| M13-3 | identity / 签名 Rust 移植 | P0 | `ed25519-dalek` 替换 `@noble/curves` |
+| M13-4 | market Rust 移植 | P1 | 业务复杂但性能要求中等 |
+| M13-5 | wiki Rust 移植 | P2 | 业务简单，最后移植 |
+| M13-6 | 存储后端替换 | P0 | JSON → lmdb / sled，通过 LedgerStorage 抽象 |
+| M13-7 | rust-libp2p 集成 | P0 | 替换 Node.js libp2p |
 
-**判断标准**：M11 写的任何新代码，问自己一句"这段代码在 Rust 实现里是否需要重写业务逻辑？"——如果答"是"，说明抽象不到位；如果答"否，只需换适配器实现"，说明抽象正确。
+#### 移植原则
 
-### 2.3 M11 必须避免的陷阱
+1. **协议规范冻结**：M13 期间不改协议设计，只做材料替换
+2. **抽象接口兑现**：M11 定义的四个抽象接口在 M13 各自得到 Rust 实现
+3. **等价测试**：所有 JS 实现通过的测试，在 Rust 实现下等价通过
+4. **跨实现互操作**：JS 节点与 Rust 节点能互通（验证协议规范的语言无关性）
 
-- **过早优化**：不在 JS 里做深度性能优化，扛不住的标记为 M13+ Rust 必修项
-- **过早 Rust 化**：M11 的核心是验证设计假设（加权转换 + 自然涌现），不是性能优化
-- **误判算法可行性**：如果 FW-01 在 JS 里测不出预期吞吐，先排除 GC / IO 抖动干扰，再下结论
-- **多 App 隔离不严**：M11 多 App 共存时，权限/资源/命名空间必须严格隔离（参考 AUDIT-M10 P1-7 跨 App 隔离）
+### M14：网络层强化
+
+**目标**：让 Havix 协议的边界维护能力从"应用层签名"升级到"网络层不可观察"，使协议假设能在敌对环境下被验证。
+
+#### 工作项
+
+| 编号 | 工作项 | 优先级 | 说明 |
+|---|---|---|---|
+| M14-1 | Nym mixnet transport 适配器 | P0 | 第一个非 libp2p transport |
+| M14-2 | DID ↔ peerId 解耦 | P0 | 让 DID 在不暴露 peerId 的前提下通信 |
+| M14-3 | Eclipse 攻击防御 Rust 强化 | P0 | DHT 邻居多样性约束 |
+| M14-4 | Katzenpost 适配器 | P1 | Nym 延迟不可接受时的备选 |
+| M14-5 | 跨网络联邦协议 | P2 | 多个 Havix 网络互联（FW-04） |
+
+#### 网络层设计原则
+
+1. **不自建 mixnet**：Nym / Katzenpost / Loopix 已解决网络层匿名性，Havix 集成而非重写
+2. **transport 可插拔**：通过 TransportAdapter 抽象，让 libp2p / Nym / Katzenpost 作为可选 transport
+3. **DID 与传输解耦**：DID 是协议层身份，peerId 是传输层标识，两者不可强绑定
+4. **网络层是协议假设验证的地基**：mixnet 不是工程优化，是让"边界维护"假设能被验证的前提
+
+### M15+：生态扩展
+
+**目标**：在协议稳定后扩展生态能力，进入横向扩展阶段。
+
+#### 候选工作项
+
+| 编号 | 工作项 | 说明 |
+|---|---|---|
+| M15-1 | 多语言 SDK | Rust / Python / Go SDK，对应 FW-04 跨网络联邦 |
+| M15-2 | 移动端节点 | 资源受限场景的协议适配 |
+| M15-3 | DID 旋转协议 | 主身份密钥泄露后的恢复路径 |
+| M15-4 | 多跳 onion transport | 在 Nym 之外的备选深度匿名方案 |
 
 ---
 
-## 3. M12：网络效应启动
+## 三、协议安全模型
 
-### 3.1 主线目标
+### 威胁谱系
 
-| 工作项 | 描述 |
+Havix 协议面对的威胁是连续的谱系，不是离散的两类：
+
+```
+被动观察 → 流量分析 → 节点劫持 → Sybil 注入 → Eclipse 攻击 → BGP 劫持
+   ↑              ↑           ↑           ↑            ↑
+  弱            中           强           强            极强
+```
+
+**设计原则**：威胁谱系上的每一级都必须有对应的协议层防御。当某一级防御缺失时，对应的协议假设无法被验证。
+
+### 防御分层
+
+| 防御层 | 防御对象 | 当前状态 | 完成阶段 |
+|---|---|---|---|
+| 密码学层 | 消息篡改 / 伪造 / 重放 | ✅ 完成（M8 审计 + AUDIT-M10） | M1–M10 |
+| 行为过滤层 | DoS / 内存膨胀 / 路径穿越 | ✅ 完成（M9.6 + AUDIT-M10） | M9.6 + AUDIT-M10 |
+| 节点间攻击层 | Sybil / Eclipse / 串谋 / Front-running | ⏳ 部分缺失 | M11 / M12 |
+| 网络层匿名 | 流量分析 / 元数据泄露 | ❌ 缺失 | M14 |
+| 物理层防御 | BGP 劫持 / ISP 级观察 | ❌ 不在 Havix 范围 | 协议外 |
+
+### 节点间攻击防护清单
+
+#### 已完成（M1–M10）
+
+| 防护 | 位置 | 防御对象 |
+|---|---|---|
+| canonical message 签名 | `message-types.js` | senderId / type 篡改 |
+| credit note 内层签名 + senderId === issuerDid | `s-node.js` | 伪造 issuer |
+| InviteToken.verifySelf() | `market.js` | 伪造 invite |
+| issuerDid ↔ pubKey 绑定（first-seen wins） | `credit.js` | keypair 旋转攻击 |
+| 仲裁 panel 排除 vouch 关联节点 | `arbitration.js` | 直接串谋 |
+| gossipsub handler 顶层 try/catch | `s-node.js` | handler 抛错 DoS |
+| Set/Map LRU 100K 上限 | 多处 | 内存膨胀 |
+| 路径穿越校验 | `config.js` / `state.js` / `web.js` / `app-manager.js` | 任意文件读写 |
+| DID / CID JSON API 脱敏 | `Embas/src/web.js` | 身份画像泄露 |
+
+#### M11 必修
+
+| 防护 | 位置 | 防御对象 |
+|---|---|---|
+| Rate limiting | `s-node.js` `_pubsubHandler` | 高频消息 CPU 耗尽 |
+| Sybil 防御加强 | `vouch.js` + `arbitration.js` | 慢速累积 vouch 入 panel |
+| Eclipse 攻击检测 | `network/dht.js` | DHT 邻居被控制 |
+| 仲裁员串谋统计检测 | `arbitration.js` | 间接串谋（无 vouch 关联但合谋） |
+| 仲裁员中途退出惩罚 | `arbitration.js` + `timeouts.js` | 恶意 abstain 拖垮裁决 |
+| Front-running commit-reveal | `market.js` | 抢订单时序攻击 |
+| issue credit 反向审计 | `credit.js` | issuer 主动作恶 |
+
+#### M12 必修
+
+| 防护 | 位置 | 防御对象 |
+|---|---|---|
+| App 准入场景 Sybil 强化 | App 注册中心 | 第三方 App 注入恶意节点 |
+| vouch 质量加权 | `vouch.js` | 低质量 vouch 灌水 |
+
+#### M13 Rust 化必修
+
+| 防护 | 位置 | 防御对象 |
+|---|---|---|
+| Nym mixnet transport | `network/tunnel.js` 适配器 | 流量分析 |
+| DID ↔ peerId 解耦 | `s-node.js` + transport 层 | peerId 可观察建立 DID 映射 |
+| Eclipse 攻击 Rust 强化 | `network/dht.js` Rust 版 | DHT 邻居多样性硬约束 |
+
+#### M14+ 暂不处理
+
+| 防护 | 说明 |
 |---|---|
-| App 注册中心 | 全局 App 目录 + 版本管理 |
-| Manifest 审核 | 第三方 App 准入流程（白皮书 §8.4） |
-| App 信任权重审核 | trustWeight 动态调整 |
-| 跨节点 App 同步 | App 列表 gossip 协议 |
-
-### 3.2 M12 的关注点
-
-- **审核机制防滥用**：不能让恶意 App 通过审核后劫持节点资源
-- **信任权重反操纵**：防 Sybil 攻击抬高权重
-- **App 生命周期**：安装 / 升级 / 卸载 / 数据迁移
+| Katzenpost 适配器 | Nym 备选方案，延迟不可接受时启用 |
+| 多跳 onion transport | 协议假设验证不依赖此项 |
 
 ---
 
-## 4. M13+：Rust 实现 + 底层升级
+## 四、假设验证覆盖度
 
-### 4.1 核心方向
+### 当前覆盖度（M1–M10 完成后）
 
-**这是直面"底层过于脆弱"的关键阶段**。
-
-| 方向 | 描述 | 优先级 |
+| 协议假设 | JS 实现验证状态 | 完整验证条件 |
 |---|---|---|
-| Rust 协议层移植 | identity / credit / vouch / market / arbitration 核心 | P0 |
-| 存储后端替换 | JSON → lmdb / sled（通过 LedgerStorage 抽象） | P0 |
-| 加密库替换 | `@noble/curves` → `ed25519-dalek`（通过 CryptoProvider 抽象） | P0 |
-| Nym mixnet 适配器 | 第一个非 libp2p transport（通过 TransportAdapter 抽象） | P0 |
-| DID↔peerId 解耦 | 让一个 DID 可在不暴露 peerId 的前提下通信 | P0 |
-| Katzenpost 适配器 | 备选 mixnet（如 Nym 延迟不可接受） | P1 |
+| 加权转换涌现角色分工（FW-01） | ⏳ 待 M11 | 不依赖网络层，M11 可完整验证 |
+| 多 App 共存时 App 间隔离 | ⏳ 待 M11 | 不依赖网络层，M11 可完整验证 |
+| 仲裁 slash 防滥用 | ⚠️ 部分验证 | M11 加串谋统计检测后完整 |
+| 私域市场双重加密防冒充 | ✅ 已验证 | 不依赖网络层 |
+| 身份不可降级（context 独立性） | ⚠️ 部分验证 | M14 DID↔peerId 解耦后完整 |
+| 信誉不可降级 | ⚠️ 部分验证 | M11 Sybil 防御 + M14 mixnet 后完整 |
+| 边界可维护（敌对环境下） | ❌ 无法验证 | M14 mixnet + DID 解耦后 |
+| 长跑稳定性 | ❌ 无法验证 | M13 Rust 实现后 |
 
-> **优先级校正记录（2026-07-19）**：
-> 原表中 Nym mixnet 适配器为 P1、DID↔peerId 解耦为 P1。本次校正为 P0。
-> 理由：观察者和攻击者是同一威胁谱系的不同强度，不是两种威胁。一旦对手从被动观察升级到主动攻击，应用层边界会被直接穿透。mixnet 不是"工程优化"，是"让论文假设有机会被证伪的最小条件"——它属于地基，不属于建筑。
+### 验证原则
 
-### 4.2 Rust 移植优先级排序原则
-
-按"对设计假设验证的贡献度"排序，不按"代码量"或"难度"排序：
-
-1. **credit / reputation ledger**——加权转换的核心，必须先 Rust 化
-2. **arbitration**——长跑稳定性要求最高（裁决不可回滚）
-3. **identity / 签名**——安全敏感，且 `ed25519-dalek` 比 `@noble/curves` 快 3-5 倍
-4. **market**——业务复杂但性能要求中等
-5. **tunnel**——必须等 Nym 适配器就绪后再移植
-6. **wiki**——可最后移植，业务简单
-
-### 4.3 不做的事
-
-- **不自建 mixnet**：Nym / Katzenpost 已经做了，Havix 集成而非重写
-- **不重写 gossipsub**：libp2p 已有，Rust 侧直接用 `rust-libp2p`
-- **不在 M13 做多语言联邦**：跨网络联邦（FW-04）留到 M14+
-- **不在 Rust 化期间改协议设计**：协议设计冻结，只做材料替换
-
-### 4.4 判断标准
-
-M13+ 完成的标志：
-- 所有 M11-M12 在 JS 里跑通的业务流程，在 Rust 实现里等价跑通
-- Nym mixnet 适配器作为可选 transport，默认关闭，可配置开启
-- 长跑节点（24h+）内存稳定，无 GC 抖动导致的吞吐毛刺
-- 4 节点集成测试在 Rust 实现下通过
+1. **JS 实现的局限不等于协议假设的局限**：当 JS 实现无法验证某项假设时，登记为"待 M13/M14 验证"，不判定协议假设被证伪
+2. **协议假设验证需要完整的威胁谱系防御**：敌对环境验证必须在 M11 节点间攻击防护 + M14 网络层匿名都完成后才能进行
+3. **内测反馈的解读**：如内测中出现"假设不成立"的结论，需先确认是否因防御缺失导致，而非协议假设本身缺陷
 
 ---
 
-## 5. 待处理债务清单
+## 五、抽象接口设计（M11 预留，M13 兑现）
 
-### 5.1 AUDIT-M10 P2（32 项，未修复）
+为让 M13 Rust 实现能无痛接管 JS 实现的业务逻辑，M11 期间定义以下四个抽象接口。**M11 只定义接口，不实现 Rust 版本**。
 
-详见 [AUDIT-M10.md](./AUDIT-M10.md)。处理策略：
-- M11 阶段按需穿插修复与多 App 相关的 P2
-- M12 阶段处理与审核机制相关的 P2
-- M13 Rust 化时大部分 P2 自然消失（如 JS 特有的类型检查、fs IO 阻塞等）
+### TransportAdapter
 
-### 5.2 JS 实现层债务（M13+ Rust 必修项清单）
+```typescript
+interface TransportAdapter {
+  // 发送 chunk 到目标 DID（不暴露 peerId）
+  sendChunk(targetDid: Did, chunk: Uint8Array): Promise<{ relay: Did, sequence: number }>
 
-需要在 M11-M12 期间持续登记，到 M13 启动时作为移植参考。当前已知的：
+  // 订阅 topic 消息
+  subscribe(topic: Topic, handler: (msg: Message) => void): Subscription
 
-| 债务 | 位置 | 影响 | Rust 化方案 |
-|---|---|---|---|
-| peerId↔DID 绑定暴露 | `s-node.js` start() | 网络层观察者可画图谱 | TransportAdapter + mixnet |
-| GC 抖动影响仲裁时效 | `arbitration.js` | 投票窗口误判超时 | Rust 原生线程 |
-| fs IO 阻塞事件循环 | `persistence.js` saveJsonAtomic | 长跑节点写入时卡顿 | lmdb / sled |
-| Set/Map LRU 上限是软限 | 多处 | 极端情况可能瞬时超限 | Rust 硬限 + 编译期检查 |
-| `@noble/curves` 性能 | `identity.js` | 高频签名场景吞吐瓶颈 | `ed25519-dalek` |
-| libp2p gossipsub 内存泄漏 | 第三方依赖 | 长跑节点内存膨胀 | `rust-libp2p` 或自维护 fork |
+  // 发布 topic 消息
+  publish(topic: Topic, msg: Message): Promise<void>
 
-### 5.3 设计层待验证假设
+  // DHT 查询（仅公共 CID）
+  dhtFind(cid: Cid): Promise<Peer[]>
 
-这些不是债务，是 M11-M12 必须验证的核心假设：
+  // 节点发现
+  discover(filter?: DiscoveryFilter): AsyncIterable<Peer>
+}
+```
 
-- **加权转换是否真能涌现角色分工**（FW-01）
-- **多 App 共存时信誉不可降级是否成立**
-- **仲裁 slash 机制在多 App 间是否被滥用**
-- **私域市场双重加密在多 App 场景下的性能可接受性**
+**默认实现**：libp2p relay（M1–M10 现状）
+**M14 实现**：Nym mixnet 适配器
+**M14+ 实现**：Katzenpost 适配器
 
-### 5.4 节点间攻击防护盘点（2026-07-19 新增）
+### LedgerStorage
 
-> **校正背景**：之前的认知把"防观察者"（Nym/Katzenpost/Loopix 做的）和"防身份降级"（Havix 做的）当作两种不同威胁，结论是"Havix 不与它们竞争，而是互补"。
-> **校正后认知**：观察者和攻击者是同一威胁谱系的不同强度。被动观察 → 流量注入 → 节点劫持 → Sybil → Eclipse 是连续的升级路径。一旦对手从"看"升级到"做"，应用层边界（context 分层 / 私域市场 / 信誉隔离）全部会被直接穿透。
-> **结论**：节点间攻击防护不是"M11+ 锦上添花"，是"Havix 协议假设能成立的前提条件"。
+```typescript
+interface LedgerStorage {
+  // 原子读
+  get<T>(key: string): Promise<T | null>
 
-#### 5.4.1 当前已做的防护（密码学层 + 简单行为过滤）
+  // 原子写
+  put<T>(key: string, value: T): Promise<void>
 
-| 防护 | 位置 | 防什么 | 不足 |
-|---|---|---|---|
-| canonical message 签名 | `message-types.js` (P0-1) | senderId/type 篡改 | 不防网络层观察 |
-| credit note 内层签名 + senderId === issuerDid | `s-node.js` (P0-2) | 伪造 issuer | 不防 issuer 主动作恶 |
-| InviteToken.verifySelf() | `market.js` (P0-4) | 伪造 invite | 不防 issuer 滥发 |
-| issuerDid ↔ pubKey 绑定（first-seen wins） | `credit.js` (P1-3) | keypair 旋转攻击 | 不防首次注册即攻击 |
-| 仲裁 panel 排除 vouch 关联节点 | `arbitration.js` summonPanel | 直接串谋 | 不防间接串谋（无 vouch 关联但合谋） |
-| vouch-collusion 作为可仲裁类型 | `arbitration.js` | vouch 舞弊 | 事后惩罚，不预防 |
-| gossipsub handler 顶层 try/catch | `s-node.js` (P0-5) | handler 抛错 DoS | 不防资源耗尽（无 rate limit） |
-| Set/Map LRU 100K 上限 | 多处 (P1-lru) | 内存膨胀 | 不防流量耗尽 |
-| topology.js 注释提到 eclipse | `network/topology.js` | - | **仅注释，未实现** |
+  // 批量原子写
+  batch<T>(ops: Array<{ type: 'put', key: string, value: T }>): Promise<void>
 
-#### 5.4.2 当前未做的防护（节点间攻击核心缺失）
+  // 范围查询
+  range(start: string, end: string): AsyncIterable<{ key: string, value: any }>
+}
+```
 
-| 缺失 | 影响 | 当前位置 | 修复阶段 |
-|---|---|---|---|
-| **Relay 可见两端 peerId + 流量模式** | 网络层观察者可画图谱 | `network/tunnel.js` | M13+ Nym 适配器 |
-| **无 Rate limiting** | 恶意节点高频发消息耗 CPU | `s-node.js` `_pubsubHandler` | M11 加 |
-| **Sybil 防御薄弱** | 攻击者慢慢累积 vouch + reputation 入 panel / 入 jurorPool | `vouch.js` + `arbitration.js` | M11 加强 + M12 准入 |
-| **Eclipse 攻击无防御** | 攻击者控制某节点所有 DHT 邻居 | `network/dht.js` | M11 加 + M13 Rust 强化 |
-| **仲裁员串谋检测缺失** | 仅排除直接 vouch 关联，无"投票模式统计异常检测" | `arbitration.js` | M11 加 |
-| **仲裁员中途退出无惩罚** | 自动 abstain 处理了但没 slash | `arbitration.js` + `timeouts.js` | M11 加 |
-| **Front-running** | 市场消息时序可被利用抢订单 | `market.js` + GossipSub | M11 加 commit-reveal |
-| **Relay 选择无信任策略** | 随机选 relay，没选可信 relay | `network/tunnel.js` | M11 加 + M13 Nym 后可去 |
-| **peerId↔DID 绑定可观察建立** | 一次握手就建立映射，后续所有行为可关联 | `s-node.js` start() | M13+ DID↔peerId 解耦 |
-| **跨节点 issue credit 无反向 audit** | issuer 主动行为，无事后审计 | `credit.js` | M11 加审计接口 |
+**默认实现**：Node.js fs + JSON（M1–M10 现状）
+**M13 实现**：lmdb / sled
 
-#### 5.4.3 分类原则
+### CryptoProvider
 
-按"修复阶段"分四档：
+```typescript
+interface CryptoProvider {
+  // Ed25519 签名
+  sign(privateKey: PrivateKey, message: Uint8Array): Promise<Signature>
 
-- **M11 必修**（不修会破坏多 App 共存假设）：Rate limiting / Sybil 防御加强 / Eclipse 检测 / 串谋统计检测 / 退出惩罚 / Front-running commit-reveal / issue credit 审计接口
-- **M12 必修**（不修会破坏 App 准入假设）：Sybil 防御在 App 准入场景下的强化 / vouch 质量加权
-- **M13 Rust 化必修**（不修会破坏论文假设可证伪性）：Nym mixnet 适配器 / DID↔peerId 解耦 / Eclipse 检测 Rust 强化
-- **M14+ 暂不处理**：Katzenpost 适配器（备选方案，Nym 不够用再做）
+  // Ed25519 验签
+  verify(publicKey: PublicKey, message: Uint8Array, signature: Signature): Promise<boolean>
 
-#### 5.4.4 假设验证覆盖度（重要）
+  // AES-GCM 加密
+  encrypt(key: SymmetricKey, plaintext: Uint8Array): Promise<Ciphertext>
 
-明确登记：**当前 JS 实现只能验证论文假设的子集**，不能宣称验证了完整假设。
+  // AES-GCM 解密
+  decrypt(key: SymmetricKey, ciphertext: Ciphertext): Promise<Uint8Array>
 
-| 假设 | 当前 JS 实现能否验证 | 完整验证需要 |
+  // SHA-256 哈希
+  hash(data: Uint8Array): Hash
+
+  // 随机数生成
+  randomBytes(length: number): Uint8Array
+}
+```
+
+**默认实现**：`@noble/curves` + `@noble/hashes` + node:crypto（M1–M10 现状）
+**M13 实现**：`ed25519-dalek` + `aes-gcm` + `sha2` + `rand_core`
+
+### PubSubProvider
+
+```typescript
+interface PubSubProvider {
+  // 订阅 topic
+  subscribe(topic: Topic): Promise<void>
+
+  // 取消订阅
+  unsubscribe(topic: Topic): Promise<void>
+
+  // 发布消息
+  publish(topic: Topic, message: Uint8Array): Promise<void>
+
+  // 注册消息处理器
+  onMessage(handler: (event: PubSubEvent) => void): void
+
+  // 获取 mesh 对等节点
+  getMeshPeers(topic: Topic): Promise<Peer[]>
+}
+```
+
+**默认实现**：libp2p gossipsub（M1–M10 现状）
+**M13 实现**：rust-libp2p gossipsub
+
+---
+
+## 六、待处理债务
+
+### AUDIT-M10 P2（32 项）
+
+可维护性 / 性能 / 文档类。处理策略：
+
+- **M11 阶段**：按需穿插处理与多 App 相关的 P2
+- **M12 阶段**：处理与审核机制相关的 P2
+- **M13 Rust 化**：大部分 P2 自然消失（如 JS 特有的类型检查、fs IO 阻塞等）
+
+### JS 实现层债务（M13 Rust 化时清偿）
+
+| 债务 | 位置 | Rust 化方案 |
 |---|---|---|
-| 高认知个体在分层结构中能避免结构性塌缩 | ❌ 仅能验证"友善环境下涌现"部分 | M13+ Rust + mixnet |
-| 加权转换能涌现角色分工（FW-01） | ✅ 业务逻辑可验证 | 不依赖网络层 |
-| 仲裁 slash 机制防滥用 | ⚠️ 部分验证（防直接串谋） | M11 加统计检测后完整验证 |
-| 私域市场双重加密防冒充 | ✅ 应用层签名验证完整 | 不依赖网络层 |
-| 信誉不可降级 | ⚠️ 部分验证（防应用层篡改） | M13+ 防 Sybil + Eclipse 后完整验证 |
-| 在敌对环境下保护个体 | ❌ 完全无法验证 | M13+ Rust + mixnet + DID 解耦 |
-
-**含义**：内测反馈如果出现"敌对环境下假设不成立"的结论，**不能直接判定论文假设被证伪**——因为当前实现根本没机会验证敌对环境。必须先补齐 M11 节点间攻击防护 + M13 mixnet，再下结论。
+| peerId↔DID 绑定可观察 | `s-node.js` start() | TransportAdapter + M14 Nym |
+| GC 抖动影响仲裁时效 | `arbitration.js` | Rust 原生线程 |
+| fs IO 阻塞事件循环 | `persistence.js` | lmdb / sled |
+| Set/Map LRU 是软限 | 多处 | Rust 硬限 + 编译期检查 |
+| `@noble/curves` 性能 | `identity.js` | `ed25519-dalek` |
+| libp2p gossipsub 内存泄漏 | 第三方依赖 | rust-libp2p |
 
 ---
 
-## 6. 内测结束后的启动检查清单
+## 七、内测反馈处理规则
 
-内测结束、准备启动 M11 时，确认以下事项：
+内测期间发现的问题按以下规则分类处理：
 
-- [ ] 内测中发现的所有 P0 已修复
-- [ ] P1 已登记到 AUDIT-M11
-- [ ] P2 已分类（M11 穿插处理 / M12 处理 / M13 自然消失）
-- [ ] `TransportAdapter` / `LedgerStorage` / `CryptoProvider` / `PubSubProvider` 四个抽象接口已在文档中定义（不需要实现，只需要定义）
-- [ ] M11 的三个 App（Embas 翻译市场 + 教学市场 + 维基 App）的设计文档已起草
-- [ ] FW-01 自然涌现算法的 v0 设计文档已起草
-- [ ] Rust 移植优先级清单已更新（基于 M11 实际跑测发现的问题）
+| 级别 | 处理时机 | 处理方式 |
+|---|---|---|
+| P0（阻断内测） | 立即 | 修复 + 回归测试 + 当天 commit |
+| P1（影响功能） | M11 启动时 | 登记到 AUDIT-M11，优先处理 |
+| P2（体验/文档） | 按需 | 登记到 AUDIT-M11，穿插处理 |
+| 设计层质疑 | M11 设计阶段 | 单独开 issue，协议设计讨论 |
+
+### 内测反馈的解读约束
+
+1. **不能因 JS 实现的局限判定协议假设被证伪**：如反馈涉及敌对环境、长跑稳定性、网络层观察，需先确认是否因防御缺失导致
+2. **不能因单次跑测失败判定协议设计错误**：需区分"协议设计问题"与"参考实现 bug"
+3. **设计层质疑需进入协议规范讨论**：不在内测期做决定，登记后等 M11 设计阶段处理
 
 ---
 
-## 7. 关键决策记录
+## 八、关键决策
 
-### 决策 1：M11-M12 不启动 Rust 化
-- **理由**：M11 的核心是验证设计假设（加权转换 + 自然涌现），不是性能优化。在假设未被业务证伪前换语言，等于在没验证地基的房子上换屋顶。
-- **替代方案**：所有新代码通过抽象层为 Rust 化留接口。
+### 决策 1：M11 不启动 Rust 化
+
+M11 的核心是验证协议设计假设（加权转换 + 自然涌现），不是性能优化。在假设未被业务证伪前换语言，等于在未验证地基的房子上换屋顶。
+
+替代方案：所有新增协议代码通过抽象层为 M13 Rust 化留接口。
 
 ### 决策 2：不自建 mixnet
-- **理由**：Nym / Katzenpost / Loopix 已解决网络层隐私，Havix 集成而非重写。Havix 团队规模与 Nym 不在一个量级，自建会拖垮协议层进度。
-- **替代方案**：通过 `TransportAdapter` 让 mixnet 可插拔，M13+ 实现 Nym 适配器作为第一个非 libp2p transport。
 
-### 决策 3：Havix 假设论证是应用层问题，但假设验证必须包含网络层防御
+Nym / Katzenpost / Loopix 已解决网络层匿名性。Havix 集成而非重写。Havix 团队规模与 mixnet 项目不在同一量级，自建会拖垮协议层进度。
 
-> **校正记录（2026-07-19）**：原表述"Havix 定位为应用层协议，网络层可外包"——这个二分法有误导性，本次校正。
+替代方案：通过 TransportAdapter 抽象让 mixnet 可插拔，M14 实现 Nym 适配器作为第一个非 libp2p transport。
 
-- **校正前的错误认知**：把"防观察者"（Nym/Katzenpost 做的）和"防身份降级"（Havix 做的）当作两种不同威胁，结论是"Havix 不与它们竞争，互补即可"。
-- **校正后的认知**：观察者和攻击者是同一威胁谱系的不同强度，不是两种威胁。被动观察 → 流量注入 → 节点劫持 → Sybil → Eclipse 是连续的升级路径。一旦对手从"看"升级到"做"，应用层边界（context 分层 / 私域市场 / 信誉隔离）全部会被直接穿透。
-- **正确的拆分**：
-  - **论文假设**：分层自组织网络是否能让高认知个体避免结构性塌缩——这是独立的社会学命题，与实现语言、与是否用 mixnet 无关
-  - **工程验证**：JS 实现只能验证"友善环境下的涌现"；要验证"敌对环境下能否保护个体"，必须 Rust + mixnet 才有机会被证伪
-- **含义**：mixnet 不是"工程优化"，是"让论文假设有机会被证伪的最小条件"。Rust 化时网络层不能简单"外包"，必须作为协议假设验证地基的一部分主动集成。
+### 决策 3：协议规范与参考实现分离
 
-### 决策 4：节点间攻击防护是 M11 的必修项，不是 M11+ 的可选项
+协议规范是语言无关的，参考实现的局限不等于协议的局限。JS 实现无法验证的协议假设，登记为"待 Rust 实现验证"，不判定协议假设被证伪。
 
-> **校正记录（2026-07-19）**：原 NEXT-STEPS.md 把节点间攻击防护混在 M13+ Rust 化债务里，本次拆出来单独成项。
+### 决策 4：节点间攻击防护是 M11 必修项
 
-- **校正前**：节点间攻击防护（Sybil / Eclipse / 串谋检测 / Rate limiting 等）被默认为"Rust 化时一起做"。
-- **校正后认知**：这些防护中的一部分（Rate limiting / Sybil 防御加强 / Eclipse 检测 / 串谋统计检测 / 退出惩罚 / Front-running commit-reveal）不依赖 Rust，是 JS 实现就能做的，**M11 必须做**——否则 M11 多 App 共存假设的验证本身就是不可信的。
-- **详见**：[5.4 节点间攻击防护盘点](#54-节点间攻击防护盘点2026-07-19-新增)
+节点间攻击防护中不依赖 Rust 的部分（Rate limiting / Sybil 防御 / Eclipse 检测 / 串谋统计检测 / 退出惩罚 / Front-running / issue credit 审计），M11 必须完成。否则 M11 多 App 共存假设的验证本身不可信。
 
-### 决策 5：P2 修复不阻断主线
-- **理由**：P2 是可维护性 / 性能 / 文档类，不影响协议设计验证。在 M11-M12 按需穿插，不安排专门冲刺。
-- **例外**：与多 App 隔离、审核机制相关的 P2 必须在对应阶段修复。
+### 决策 5：网络层防御是协议假设验证的地基
+
+mixnet 不是工程优化，是让"边界维护"假设能被验证的前提条件。M14 Nym 适配器与 DID↔peerId 解耦是协议假设完整验证的必要条件，不是可选项。
+
+### 决策 6：P2 修复不阻断主线
+
+P2 是可维护性 / 性能 / 文档类，不影响协议设计验证。在 M11–M12 按需穿插，不安排专门冲刺。例外：与多 App 隔离、审核机制相关的 P2 必须在对应阶段修复。
 
 ---
 
-## 8. 联系与参考
+## 九、内测结束后的启动检查清单
 
-- 协议设计：[Havix-Technical-Whitepaper.md](./Havix-Technical-Whitepaper.md)
-- 当前审计：[AUDIT-M10.md](./AUDIT-M10.md)
-- 项目概览：[README.md](./README.md)
-- 部署运行：[DEPLOY.md](./DEPLOY.md)
-- 开发路线：[ROADMAP.md](./ROADMAP.md)
-- 项目摘要：[PROJECT-SUMMARY.md](./PROJECT-SUMMARY.md)
+内测结束、启动 M11 前确认：
 
-### 外部参考（M13+ 底层升级方向）
+- [ ] 内测发现的所有 P0 已修复
+- [ ] P1 已登记到 AUDIT-M11
+- [ ] P2 已分类（M11 穿插 / M12 处理 / M13 自然消失）
+- [ ] M11 三个 App 设计文档已起草（教学市场 / 维基 App / 加权转换协议）
+- [ ] FW-01 自然涌现算法 v0 设计文档已起草
+- [ ] 四个抽象接口（TransportAdapter / LedgerStorage / CryptoProvider / PubSubProvider）已在文档中定义
+- [ ] 节点间攻击防护 7 项 M11 必修已排入 M11 工作计划
+- [ ] 假设验证覆盖度表已更新
+
+---
+
+## 十、参考文档
+
+### Havix 项目内
+
+- [技术白皮书](./Havix-Technical-Whitepaper.md) —— 协议规范
+- [AUDIT-M10.md](./AUDIT-M10.md) —— 全栈审计报告
+- [README.md](./README.md) —— 项目概览
+- [DEPLOY.md](./DEPLOY.md) —— 部署运行
+- [ROADMAP.md](./ROADMAP.md) —— M9–M12 阶段路线
+- [PROJECT-SUMMARY.md](./PROJECT-SUMMARY.md) —— M10 完结快照
+
+### 外部参考
 
 - Nym mixnet: https://nymtech.net/
 - Katzenpost: https://katzenpost.mixnetworks.org/
@@ -319,4 +484,4 @@ M13+ 完成的标志：
 
 ---
 
-*本日志为内测结束后的 M11 启动参考。内测期间发现的问题将登记到 AUDIT-M11.md，不修改本文件。*
+*本文档定义 Havix 协议从参考实现到完整形态的工程路径。各阶段工作项的具体设计文档在各阶段启动时单独起草。*
