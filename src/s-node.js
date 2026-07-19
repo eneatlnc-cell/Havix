@@ -1141,17 +1141,28 @@ export class SNode {
     if (!m.isCreator) {
       throw new Error(`本节点不是市场 ${marketId} 的创建者，无权签发邀请令牌`)
     }
-    // P1 修复：min_reputation 强制
+    // P1-8 修复：min_reputation fail-closed（M9.6）
+    //   原实现 `if (manifest && this.reputationLedger)` 在 manifest 或 ledger 缺失时
+    //   静默跳过校验——任意节点都能"忘"带 ledger 后绕过信誉门槛。改为：
+    //   - manifest 缺失：fail-closed 抛错（市场 manifest 是 issueInvite 的必要前置）
+    //   - reputationLedger 缺失：fail-closed 抛错（节点未注入信誉账本，不能放行）
     const manifest = m.manifest
-    if (manifest && this.reputationLedger) {
-      const inviteeRep = this.reputationLedger.getAvailable(inviteeDid)
-      if (inviteeRep < manifest.minReputation) {
-        throw new InsufficientReputationError({
-          did: inviteeDid,
-          needed: manifest.minReputation,
-          available: inviteeRep,
-        })
-      }
+    if (!manifest) {
+      throw new Error(`市场 ${marketId} 缺少 manifest，issueInvite fail-closed（P1-8 修复）`)
+    }
+    if (!this.reputationLedger) {
+      throw new Error(
+        `节点未注入 reputationLedger，issueInvite fail-closed（P1-8 修复）：` +
+        `无法校验 invitee ${inviteeDid} 的可用信誉是否满足 minReputation=${manifest.minReputation}`,
+      )
+    }
+    const inviteeRep = this.reputationLedger.getAvailable(inviteeDid)
+    if (inviteeRep < manifest.minReputation) {
+      throw new InsufficientReputationError({
+        did: inviteeDid,
+        needed: manifest.minReputation,
+        available: inviteeRep,
+      })
     }
     const issuerIdentity = this.wallet.get('A')
     return await issueInviteToken({
@@ -1650,13 +1661,23 @@ export class SNode {
           })
           dispute = this.arbitrationRegistry.getDispute(disputeId)
         }
-        // P1 修复：verdict senderId 必须是已召集 panel 中的仲裁员
-        //   （若本地尚未镜像 panel，跳过此校验——只在没有 panel 信息时才宽松接受，
-        //    有 panel 信息时严格校验，防止任意节点伪造裁决）
-        if (dispute.panel && dispute.panel.length > 0 && !dispute.panel.includes(senderId)) {
+        // P1-10 修复：verdict senderId 必须是已召集 panel 中的仲裁员（fail-closed）
+        //   原实现 panel 为空时宽松接受——攻击者可在 panel 镜像未到达前伪造裁决，
+        //   让 dispute.status = RESOLVED 提前固化。改为 fail-closed：
+        //   - panel 未镜像（空）→ 拒绝裁决（强制等待 panel 消息收敛后再处理 verdict）
+        //   - panel 已知但 senderId 不在 panel 中 → 拒绝裁决
+        if (!dispute.panel || dispute.panel.length === 0) {
+          this.log('warn', 'arbitration',
+            `verdict action: dispute ${disputeId} 本地未镜像 panel，拒绝裁决（fail-closed, P1-10 修复）`)
+          return {
+            applied: false,
+            reason: '本地未镜像 panel，拒绝裁决（fail-closed，P1-10 修复）',
+          }
+        }
+        if (!dispute.panel.includes(senderId)) {
           this.log('warn', 'arbitration',
             `verdict action: senderId(${senderId?.slice(0, 12)}...) 不在 panel 中，拒绝镜像裁决`)
-          return { applied: false, reason: 'verdict senderId 不在仲裁团 panel 中（P1 修复）' }
+          return { applied: false, reason: 'verdict senderId 不在仲裁团 panel 中（P1-10 修复）' }
         }
         // 如本地未裁决且 payload.verdict 存在，标记本地裁决（但不执行 slash——slash 只由原始仲裁节点执行）
         if (dispute.status !== DISPUTE_STATUS.RESOLVED && payload.verdict) {

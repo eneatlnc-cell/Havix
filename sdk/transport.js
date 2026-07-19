@@ -38,6 +38,10 @@ export function createTransportApi(snode, manifest) {
 
   // 记录订阅便于 unsubscribe
   if (!snode._transportSubscriptions) snode._transportSubscriptions = new Map()
+  // P1-7 修复：本 App 自己注册的订阅（topic -> Set<wrapped>）
+  //   原实现 app.stop() 直接 snode._transportSubscriptions.clear()，会清掉其他 App 的订阅。
+  //   改为只清理 ownSubscriptions 中记录的本 App 注册的项。
+  const ownSubscriptions = new Map()
 
   /**
    * 校验 topic 名：必须是字符串、非空、包含 / 前缀。
@@ -96,6 +100,11 @@ export function createTransportApi(snode, manifest) {
       snode._transportSubscriptions.set(topic, new Set())
     }
     snode._transportSubscriptions.get(topic).add(wrapped)
+    // P1-7：同时记录到本 App ownSubscriptions（只跟踪自己注册的）
+    if (!ownSubscriptions.has(topic)) {
+      ownSubscriptions.set(topic, new Set())
+    }
+    ownSubscriptions.get(topic).add(wrapped)
   }
 
   /**
@@ -109,6 +118,24 @@ export function createTransportApi(snode, manifest) {
       await snode.libp2p.services.pubsub.unsubscribe(topic)
     }
     snode._transportSubscriptions.delete(topic)
+    ownSubscriptions.delete(topic)
+  }
+
+  /**
+   * 清理本 App 注册的所有订阅（P1-7 修复：只清理自己的，不影响其他 App）。
+   * 由 app.stop() 调用。
+   * @returns {Promise<void>}
+   * @private
+   */
+  async function _dispose() {
+    for (const [topic, handlers] of ownSubscriptions) {
+      const snodeSet = snode._transportSubscriptions?.get(topic)
+      if (snodeSet) {
+        for (const h of handlers) snodeSet.delete(h)
+        if (snodeSet.size === 0) snode._transportSubscriptions.delete(topic)
+      }
+    }
+    ownSubscriptions.clear()
   }
 
   return {
@@ -116,5 +143,6 @@ export function createTransportApi(snode, manifest) {
     subscribe,
     unsubscribe,
     TOPIC_PREFIX,
+    _dispose,
   }
 }

@@ -142,10 +142,19 @@ export async function createApp(snode, manifest, options = {}) {
 
   // 6. 装配 stop() 辅助（清空内部状态，M9.3 AppManager 调用）
   app.stop = async function () {
-    // 清理 transport / market 订阅
-    if (snode._transportSubscriptions) snode._transportSubscriptions.clear()
-    if (snode._marketSubscriptions) snode._marketSubscriptions.clear()
-    if (snode._creditHandlers) snode._creditHandlers.length = 0
+    // P1-7 修复：只清理本 App 自己注册的订阅与 handler，不影响其他 App。
+    //   原实现直接清 snode._transportSubscriptions / _marketSubscriptions / _creditHandlers，
+    //   会把其他 App 在 snode 共享状态中的注册一起清掉。
+    //   改为每个子模块提供 _dispose()，只清理自己 ownSubscriptions/ownHandlers 记录的项。
+    try { await app.transport?._dispose?.() } catch (err) {
+      app.log?.('warn', 'app', `transport._dispose 失败: ${err.message}`)
+    }
+    try { await app.market?._dispose?.() } catch (err) {
+      app.log?.('warn', 'app', `market._dispose 失败: ${err.message}`)
+    }
+    try { app.credit?._dispose?.() } catch (err) {
+      app.log?.('warn', 'app', `credit._dispose 失败: ${err.message}`)
+    }
     // state flush（M9.3 真实 SNode 才有持久化效果）
     await app.state.flush?.()
   }

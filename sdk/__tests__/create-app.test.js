@@ -103,16 +103,20 @@ test('createApp: 缺 libp2p.services.pubsub 时 transport 为 null', async () =>
   assert.equal(app.transport, null)
 })
 
-test('createApp.stop: 清理订阅 + state.flush', async () => {
+test('createApp.stop: 清理订阅 + state.flush（P1-7 修复：只清理自己注册的）', async () => {
   const snode = createSnodeMock()
   const app = await createApp(snode, makeManifest())
-  snode._transportSubscriptions = new Map([['/t', new Set()]])
-  snode._marketSubscriptions = new Map([['m1', new Set()]])
-  snode._creditHandlers = [() => {}]
+
+  // 模拟"其他 App"在 snode 共享状态中注册的订阅——本 App.stop() 不应清理它们
+  const otherHandler = () => {}
+  snode._transportSubscriptions = new Map([['/other-app-topic', new Set([otherHandler])]])
+  snode._marketSubscriptions = new Map([['other-market', new Set([otherHandler])]])
+  snode._creditHandlers = [otherHandler]
   await app.stop()
-  assert.equal(snode._transportSubscriptions.size, 0)
-  assert.equal(snode._marketSubscriptions.size, 0)
-  assert.equal(snode._creditHandlers.length, 0)
+  // P1-7：本 App 没注册任何订阅，stop 后其他 App 的注册应保持
+  assert.equal(snode._transportSubscriptions.size, 1)
+  assert.equal(snode._marketSubscriptions.size, 1)
+  assert.equal(snode._creditHandlers.length, 1)
 })
 
 test('createApp: log 优先 options.log > snode.log', async () => {

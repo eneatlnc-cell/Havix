@@ -31,6 +31,7 @@
  */
 
 import path from 'node:path'
+import { validateDataDir } from './manifest.js'
 
 /**
  * 创建 state API 实例。
@@ -51,7 +52,13 @@ export function createStateApi(snode, manifest, dataDirOrOpts = null) {
     ? { dataDir: dataDirOrOpts }
     : (dataDirOrOpts ?? {})
 
-  const dataDirName = opts.dataDir ?? manifest.dataDir ?? manifest.name
+  // P0-1 修复：opts.dataDir 必须经过与 manifest.dataDir 等价的路径校验
+  //   manifest.dataDir 在 AppManifest 构造时已校验；opts.dataDir 来自 createApp 调用方，
+  //   未校验可被传入 '../../../etc/cron.d' 等路径穿越字符串，导致 flush() 任意文件写入。
+  //   这里复用 validateDataDir（manifest.js 导出），拒绝绝对路径 / .. / 反斜杠等。
+  const dataDirName = opts.dataDir !== undefined
+    ? validateDataDir(opts.dataDir, manifest.name)
+    : (manifest.dataDir ?? manifest.name)
   // 持久化路径（M9.3 接入真实 SNode 时用）
   const persistDir = path.join(
     snode?.config?.dataDir ?? '.data',

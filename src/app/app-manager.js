@@ -153,7 +153,24 @@ export class AppManager {
     }
 
     // 5. 动态加载 entryPoint（ES module）
+    //    P1-1 修复：entryPoint 是 manifest 字段，AppManifest 校验过格式但未校验路径穿越。
+    //    这里再次校验：path.resolve(appDir, entryPoint) 解析后的绝对路径必须仍在 appDir 之内。
+    //    manifest.entryPoint 形如 '../../../etc/cron.d/x' 或绝对路径会被这一道关卡拦截。
     const entryPath = path.resolve(appDir, manifest.entryPoint)
+    const relEntry = path.relative(appDir, entryPath)
+    if (relEntry.startsWith('..') || path.isAbsolute(relEntry)) {
+      throw new InvalidAppStateError(
+        `App "${manifest.name}" 的 entryPoint 路径穿越：${manifest.entryPoint}（解析后: ${entryPath}，超出 appDir: ${appDir}）`,
+        {
+          details: {
+            entryPoint: manifest.entryPoint,
+            entryPath,
+            appDir,
+            relEntry,
+          },
+        },
+      )
+    }
     if (!fs.existsSync(entryPath)) {
       throw new InvalidAppStateError(
         `App "${manifest.name}" 的 entryPoint 不存在: ${manifest.entryPoint}（路径: ${entryPath}）`,

@@ -9,6 +9,7 @@ pnpm-debug.log*
 .data-*/
 .data-test-*/
 .data-m83-*/
+.test-data/
 .havix-data/
 *.peerid
 *.key

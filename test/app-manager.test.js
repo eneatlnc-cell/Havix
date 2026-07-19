@@ -322,17 +322,19 @@ describe('AppManager: stop 与生命周期', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('stop() 调用 app.stop() 清理订阅', async () => {
+  test('stop() 调用 app.stop() 清理订阅（P1-7 修复：只清理自己注册的）', async () => {
     const tmpDir = makeTempDir()
     createTestApp(tmpDir, {
       name: 'cleanup-app',
-      permissions: ['transport:subscribe', 'transport:publish'],
+      permissions: ['transport:subscribe', 'transport:publish', 'credit:balance'],
       entryCode: [
         'export async function start(snode, manifest, app) {',
-        '  // 模拟注册一些订阅',
-        '  snode._transportSubscriptions = new Set(["topic1"])',
-        '  snode._marketSubscriptions = new Set(["market1"])',
+        '  // 模拟"其他 App"在 snode 共享状态中注册的订阅',
+        '  snode._transportSubscriptions = new Map([["other-topic", new Set([() => {}])]])',
+        '  snode._marketSubscriptions = new Map([["other-market", new Set([() => {}])]])',
         '  snode._creditHandlers = [() => {}]',
+        '  // 本 App 通过 SDK 注册自己的 handler（应被 stop 清理）',
+        '  app.credit.onReceived(() => {})',
         '}',
       ].join('\n'),
     })
@@ -341,10 +343,12 @@ describe('AppManager: stop 与生命周期', () => {
     const am = new AppManager(snode, null, { appsDir: tmpDir })
     await am.start()
 
-    // stop 应该清空订阅
+    // stop 应只清理本 App 自己注册的，不应清空 snode 共享状态
     await am.stop()
-    // app.stop() 已被调用，snode._creditHandlers 被清空
-    assert.equal(snode._creditHandlers.length, 0)
+    // 本 App onReceived 注册的 1 个 handler 被清理 → snode._creditHandlers 应剩 1（其他 App 的）
+    assert.equal(snode._creditHandlers.length, 1)
+    assert.equal(snode._transportSubscriptions.size, 1)
+    assert.equal(snode._marketSubscriptions.size, 1)
 
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })

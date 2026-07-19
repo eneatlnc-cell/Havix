@@ -1014,6 +1014,7 @@ test('SDK 集成：App A 创建市场 → App B 加入 → 双方收到消息', 
 | **M9.3** | AppManager + SNode 集成 + config 选项 | 中 | ~15 测试 | ✅ 52 测试 |
 | **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 | ✅ 24 测试 |
 | **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 | ✅ 28 测试 |
+| **M9.6** | 安全加固第一步（深度审计后立即修复 6 项 + 27 P0 测试） | 中 | ~25 测试 | ✅ 27 测试 |
 
 每个子阶段完成后跑全量回归，确认无 regression。
 
@@ -1162,8 +1163,21 @@ havix/                          # 主仓库
      - stop hook：调用 app.state.flush() 显式写盘
    - `apps/empty-app/README.md`：App 开发文档（manifest 字段表 + start hook 签名 + 改造步骤 + 验证命令 + 约束）
    - `test/empty-app.test.js`：28 个测试覆盖 App 加载 / CLI 命令 / Web 路由 / State 持久化往返 / Credit 派发 / stop hook / WebPanel 端到端 / manifest 校验
-6. **M9 阶段二完成** → 进入 M10 翻译市场（第一个真实 App，依赖 M9 SDK）
+6. ✅ **M9.6 安全加固第一步**已完成（27 P0 安全测试 / 980 全量回归通过）
+   - 深度审计：3 个并行 subagent 审计 SDK 层 16 文件 + 协议层 16 文件 + 测试层 27+15 文件，生成 `AUDIT-M9.md`（1 P0 + 19 P1 + 21 P2 + 88 测试缺口）
+   - 立即修复 6 项：
+     - **P0-1** `sdk/state.js` `opts.dataDir` 路径穿越 → 复用 `validateDataDir` 校验
+     - **P1-1** `src/app/app-manager.js` entryPoint 路径穿越 → `path.relative` + `relEntry.startsWith('..')` 校验
+     - **P1-5** `sdk/web.js` `mount()` `opts.dir` 路径穿越 → 复用 `validateDataDir` 校验
+     - **P1-7** `sdk/app.js` `app.stop()` 跨 App 影响 → transport / market / credit 三个子模块各自维护 `ownSubscriptions` 闭包 + `_dispose()` 只清理自己注册的项
+     - **P1-8** `src/s-node.js` `issueInvite` fail-closed → manifest 缺失或 reputationLedger 未注入时直接抛错
+     - **P1-10** `src/s-node.js` `_handleArbitrationMessage` verdict fail-closed → 本地未镜像 panel 时拒绝裁决
+   - `sdk/manifest.js` 导出 `validateDataDir` 供 state.js / web.js 复用，避免逻辑漂移
+   - `test/security-m96.test.js`：27 个 P0 安全测试覆盖 6 个修复点 + validateDataDir 单元测试
+7. **M9 阶段二（App SDK + 安全加固第一步）完成** → 下一步可选：
+   - **M9.7** 安全加固第二步（11 项近期修复 + 23 P1 测试补充）：context 权限空转 / `_onReceived` 泄露 / market senderId 内层签名 / 主账本 Map LRU / App 沙箱收敛 / manifest 路径校验跨平台
+   - **M10 翻译市场**（用户已暂缓，要在独立库开发做隔离）
 
 ---
 
-**Last Updated**: M9.5 empty-app 参考模板 + 集成测试已完成 · 全量回归 953/953 通过 · M9 阶段二（App SDK）全部完成 · 下一步 M10 翻译市场（第一个真实 App）
+**Last Updated**: M9.6 安全加固第一步已完成 · 全量回归 980/980 通过 · 深度审计报告已生成（AUDIT-M9.md）· 下一步可选 M9.7 安全加固第二步 / M10 翻译市场（已暂缓，独立库开发）

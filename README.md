@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.5 empty-app 参考模板 + 集成测试已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
+> 当前阶段：**M9.6 安全加固第一步（6 项立即修复）已完成** ✅ · 深度审计报告已生成 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -330,6 +330,36 @@ M9 阶段二收尾：提供 `apps/empty-app/` 最小可运行 App 参考模板�
 
 ✅ 全量回归 953/953 通过（M9.4 后 925 + M9.5 新增 28 = 953，无 regression）
 
+### M9.6 安全加固第一步（深度审计后立即修复）
+
+M9.5 完成后对全部代码库（SDK 层 16 文件 + 协议层 16 文件 + 测试层 27 + 15 文件）做深度安全审计，发现 1 个 P0 + 19 个 P1 + 21 个 P2 + 88 项测试缺口。完整审计报告见 [AUDIT-M9.md](./AUDIT-M9.md)。**M9.6 第一步** 修复 6 项立即修复项 + 补 27 个 P0 安全测试用例，确保协议层与 SDK 在 MVP 阶段不留致命漏洞。
+
+**P0 致命漏洞修复（1 项）**：
+- **P0-1 state.js opts.dataDir 路径穿越**：M9.3 引入的回归——`createStateApi` 的 `opts.dataDir` 来自 createApp 调用方未做路径校验，可被传入 `'../../../etc/cron.d'` 等路径穿越字符串，导致 `flush()` 任意文件写入。修复：在 [sdk/state.js](sdk/state.js) 入口复用 manifest.js 导出的 `validateDataDir` 校验（拒绝绝对路径 / `..` / Windows 盘符），与 manifest.dataDir 等价校验避免逻辑漂移
+
+**P1 高危漏洞修复（5 项）**：
+- **P1-1 AppManager entryPoint 路径穿越**：[src/app/app-manager.js](src/app/app-manager.js) L156 的 `path.resolve(appDir, manifest.entryPoint)` 未校验解析后的路径是否仍在 appDir 内。修复：用 `path.relative(appDir, entryPath)` 检查 `relEntry.startsWith('..')` 或绝对路径，越界抛 `InvalidAppStateError`
+- **P1-5 web.mount opts.dir 路径穿越**：[sdk/web.js](sdk/web.js) `mount()` 的 `opts.dir` 未校验路径穿越，可让 App 静态文件 mount 读取任意目录。修复：复用 `validateDataDir(opts.dir, appName)` 校验
+- **P1-7 app.stop() 跨 App 影响**：[sdk/app.js](sdk/app.js) `app.stop()` 直接 `snode._transportSubscriptions.clear()` / `_marketSubscriptions.clear()` / `_creditHandlers.length = 0`，多 App 共用 snode 共享状态时，一个 App 停止会清空其他 App 的订阅与 handler。修复：transport / market / credit 三个子模块各自维护 `ownSubscriptions` / `ownHandlers` 闭包变量，提供 `_dispose()` 只清理自己注册的项；`app.stop()` 调用各模块的 `_dispose()` 而非直接清空 snode 共享状态
+- **P1-8 issueInvite 静默跳过 min_reputation**：[src/s-node.js](src/s-node.js) L1146 `if (manifest && this.reputationLedger)` 在 manifest 或 ledger 缺失时静默跳过校验——节点可"忘"带 ledger 后绕过信誉门槛。修复：fail-closed，manifest 缺失或 reputationLedger 未注入时直接抛错而非跳过
+- **P1-10 仲裁裁决 fail-closed**：[src/s-node.js](src/s-node.js) L1656 `_handleArbitrationMessage` 的 `verdict` action 在本地未镜像 panel 时宽松接受，攻击者可在 panel 消息收敛前伪造裁决让 `dispute.status = RESOLVED` 提前固化。修复：fail-closed，本地未镜像 panel 时拒绝裁决（强制等待 panel 消息收敛后再处理 verdict）
+
+**P0 安全测试用例（27 项，[test/security-m96.test.js](test/security-m96.test.js)）**：
+- P0-1 state.js opts.dataDir 路径穿越（6 项）：拒绝绝对路径 / Windows 盘符 / `..` 穿越 / 嵌套穿越 / M9.2 兼容字符串形式 + 接受合法相对路径
+- P1-1 AppManager entryPoint 路径穿越（4 项）：拒绝 `../../../etc/passwd` / 绝对路径 / 跨目录 `../sibling/index.js` + 接受合法 `./index.js`
+- P1-5 web.mount opts.dir 路径穿越（3 项）：拒绝 `../../../etc` / 绝对路径 + 接受合法相对路径
+- P1-7 app.stop() 跨 App 隔离（6 项）：本 App transport / market / credit 订阅与 handler 被清理 + 其他 App 的保留
+- P1-8 issueInvite fail-closed（3 项）：reputationLedger 缺失抛错 / manifest 缺失抛错 / 信誉达标时放行
+- P1-10 仲裁裁决 fail-closed（3 项）：panel 为空拒绝 / senderId 不在 panel 拒绝 / 在 panel 接受
+- validateDataDir 单元测试（2 项）：默认值返回 manifest.name / 接受合法相对路径 + 拒绝非字符串类型
+
+**审计 deferred 到 M9.7 / M10 前**：
+- P1 第二步（11 项近期修复）：context 权限空转 / `_onReceived` 泄露 / market senderId 内层签名 / 主账本 Map LRU / App 沙箱收敛 / manifest 路径校验跨平台
+- P1 第三步 + P2 优化：mock 与真实行为对齐 / SDK 资源上限 / 异常隔离 / WebPanel 安全头 / 持久化健壮性 / parseSimpleYaml 原型键防御
+- 88 项测试缺口补充（27 P0 已完成，剩 23 P1 + 38 P2）
+
+✅ 全量回归 980/980 通过（M9.5 后 953 + M9.6 新增 27 = 980，无 regression）
+
 ### M1 双平面传输基线
 
 构建 Havix 节点的传输层骨架：libp2p 3.x + helia 7.x，TCP + noise E2E 加密 + yamux/mplex 多路复用。提供局域网 mDNS 自动发现与手动 multiaddr 跨网段引导两种邻居发现方式。KadDHT 默认 LAN 模式（`/ipfs/lan/kad/1.0.0`），与公网 IPFS Amino DHT 隔离；DHT 门控在协议层硬性拦截私域 CID 的 provide/findProviders 调用，抛 `PrivateCidRejectedError`，不依赖加密兜底。公共层订阅三个 gossipsub 频道（`/s-network/announce`、`/reputation`、`/alert`），心跳定时器每 30s 广播邻居列表，SIGINT/SIGTERM 优雅退出。
@@ -610,14 +640,23 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e + SDK，约 55 秒，共 953 个用例）
+# 全部测试（单元 + e2e + SDK，约 55 秒，共 980 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（953 个用例，全部通过）：
+测试覆盖（980 个用例，全部通过）：
+
+**M9.6 安全加固第一步（27 个 P0 安全测试）**
+- P0-1 state.js opts.dataDir 路径穿越（6 个）：拒绝绝对路径 / Windows 盘符 / `..` 穿越 / 嵌套穿越 / M9.2 兼容字符串形式 + 接受合法相对路径
+- P1-1 AppManager entryPoint 路径穿越（4 个）：拒绝 `../../../etc/passwd` / 绝对路径 / 跨目录 + 接受合法入口
+- P1-5 web.mount opts.dir 路径穿越（3 个）：拒绝 `../../../etc` / 绝对路径 + 接受合法相对路径
+- P1-7 app.stop() 跨 App 隔离（6 个）：本 App transport / market / credit 订阅与 handler 被清理 + 其他 App 的保留
+- P1-8 issueInvite fail-closed（3 个）：reputationLedger 缺失抛错 / manifest 缺失抛错 / 信誉达标放行
+- P1-10 仲裁裁决 fail-closed（3 个）：panel 为空拒绝 / senderId 不在 panel 拒绝 / 在 panel 接受
+- validateDataDir 单元测试（2 个）：默认值 + 接受合法相对路径
 
 **M9.5 empty-app 参考模板集成阶段（28 个）**
 - App 加载（3 个）：AppManager 扫描加载 / 7 大接口装配 / start hook 初始化 state

@@ -822,4 +822,4 @@ export function validateManifest(raw) {
   }
 }
 
-export { ManifestError, isValidPermission }
+export { ManifestError, isValidPermission, validateDataDir }

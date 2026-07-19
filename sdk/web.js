@@ -23,6 +23,8 @@
 
 // 路由记录结构：{ method: 'GET', path: string, type: 'static'|'api', handler: function, dir?: string }
 
+import { validateDataDir } from './manifest.js'
+
 /**
  * 创建 web API 实例。
  *
@@ -75,6 +77,10 @@ export function createWebApi(snode, manifest) {
     if (typeof opts.dir !== 'string' || opts.dir.length === 0) {
       throw new Error('web.mount: opts.dir 必须是非空字符串')
     }
+    // P1-5 修复：opts.dir 必须经过路径穿越校验
+    //   mount() 后续会从 opts.dir 读取静态文件，未校验可让 App 读取任意目录。
+    //   复用 manifest.js 的 validateDataDir（语义一致：相对路径 + 无 .. + 无绝对路径）。
+    validateDataDir(opts.dir, appName)
     // 先做基本校验（非空 / 以 / 开头 / 以 / 结尾），再 validatePath 检查前缀
     // ——避免 path 无尾 / 时被前缀校验先抛错，掩盖真正的"缺尾 /"问题
     if (typeof mountPath !== 'string' || mountPath.length === 0) {

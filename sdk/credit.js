@@ -155,6 +155,23 @@ export function createCreditApi(snode, manifest) {
     }
   }
 
+  /**
+   * 清理本 App 注册的 credit handler（P1-7 修复：只清理自己的）。
+   * 由 app.stop() 调用。
+   * 原实现直接 snode._creditHandlers.length = 0，会清掉其他 App 的 handler。
+   * @returns {void}
+   * @private
+   */
+  function _dispose() {
+    if (appHandlers && snode._creditHandlers) {
+      for (const h of appHandlers) {
+        const idx = snode._creditHandlers.indexOf(h)
+        if (idx >= 0) snode._creditHandlers.splice(idx, 1)
+      }
+    }
+    appHandlers = null
+  }
+
   return {
     issue,
     consume,
@@ -163,5 +180,6 @@ export function createCreditApi(snode, manifest) {
     onReceived,
     // M9.3 内部 API（不直接暴露给 App，AppManager 用）
     _onReceived,
+    _dispose,
   }
 }

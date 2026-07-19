@@ -43,6 +43,10 @@ export function createMarketApi(snode, manifest) {
   const perms = manifest.permissions
   const appName = manifest.name
 
+  // P1-7 修复：本 App 自己注册的市场订阅（marketId -> Set<wrapped>）
+  //   原实现 app.stop() 直接 snode._marketSubscriptions.clear()，会清掉其他 App 的订阅。
+  const ownSubscriptions = new Map()
+
   /**
    * 创建新市场。
    * @param {object} opts
@@ -148,6 +152,9 @@ export function createMarketApi(snode, manifest) {
     if (!snode._marketSubscriptions) snode._marketSubscriptions = new Map()
     if (!snode._marketSubscriptions.has(marketId)) snode._marketSubscriptions.set(marketId, new Set())
     snode._marketSubscriptions.get(marketId).add(wrapped)
+    // P1-7：同时记录到本 App ownSubscriptions
+    if (!ownSubscriptions.has(marketId)) ownSubscriptions.set(marketId, new Set())
+    ownSubscriptions.get(marketId).add(wrapped)
   }
 
   /**
@@ -166,6 +173,7 @@ export function createMarketApi(snode, manifest) {
     if (snode._marketSubscriptions?.has(marketId)) {
       snode._marketSubscriptions.delete(marketId)
     }
+    ownSubscriptions.delete(marketId)
   }
 
   /**
@@ -213,6 +221,23 @@ export function createMarketApi(snode, manifest) {
     return snode.getMarketManifest(marketId)
   }
 
+  /**
+   * 清理本 App 注册的市场订阅（P1-7 修复：只清理自己的）。
+   * 由 app.stop() 调用。
+   * @returns {Promise<void>}
+   * @private
+   */
+  async function _dispose() {
+    for (const [marketId, handlers] of ownSubscriptions) {
+      const snodeSet = snode._marketSubscriptions?.get(marketId)
+      if (snodeSet) {
+        for (const h of handlers) snodeSet.delete(h)
+        if (snodeSet.size === 0) snode._marketSubscriptions.delete(marketId)
+      }
+    }
+    ownSubscriptions.clear()
+  }
+
   return {
     create,
     invite,
@@ -224,5 +249,6 @@ export function createMarketApi(snode, manifest) {
     list,
     isMember,
     getManifest,
+    _dispose,
   }
 }
