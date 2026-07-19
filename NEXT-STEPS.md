@@ -124,9 +124,13 @@ M11 不启动 Rust 重写，但**所有新增协议代码必须为 M13+ Rust 化
 | Rust 协议层移植 | identity / credit / vouch / market / arbitration 核心 | P0 |
 | 存储后端替换 | JSON → lmdb / sled（通过 LedgerStorage 抽象） | P0 |
 | 加密库替换 | `@noble/curves` → `ed25519-dalek`（通过 CryptoProvider 抽象） | P0 |
-| Nym mixnet 适配器 | 第一个非 libp2p transport（通过 TransportAdapter 抽象） | P1 |
-| Katzenpost 适配器 | 备选 mixnet（如 Nym 延迟不可接受） | P2 |
-| DID↔peerId 解耦 | 让一个 DID 可在不暴露 peerId 的前提下通信 | P1 |
+| Nym mixnet 适配器 | 第一个非 libp2p transport（通过 TransportAdapter 抽象） | P0 |
+| DID↔peerId 解耦 | 让一个 DID 可在不暴露 peerId 的前提下通信 | P0 |
+| Katzenpost 适配器 | 备选 mixnet（如 Nym 延迟不可接受） | P1 |
+
+> **优先级校正记录（2026-07-19）**：
+> 原表中 Nym mixnet 适配器为 P1、DID↔peerId 解耦为 P1。本次校正为 P0。
+> 理由：观察者和攻击者是同一威胁谱系的不同强度，不是两种威胁。一旦对手从被动观察升级到主动攻击，应用层边界会被直接穿透。mixnet 不是"工程优化"，是"让论文假设有机会被证伪的最小条件"——它属于地基，不属于建筑。
 
 ### 4.2 Rust 移植优先级排序原则
 
@@ -187,6 +191,65 @@ M13+ 完成的标志：
 - **仲裁 slash 机制在多 App 间是否被滥用**
 - **私域市场双重加密在多 App 场景下的性能可接受性**
 
+### 5.4 节点间攻击防护盘点（2026-07-19 新增）
+
+> **校正背景**：之前的认知把"防观察者"（Nym/Katzenpost/Loopix 做的）和"防身份降级"（Havix 做的）当作两种不同威胁，结论是"Havix 不与它们竞争，而是互补"。
+> **校正后认知**：观察者和攻击者是同一威胁谱系的不同强度。被动观察 → 流量注入 → 节点劫持 → Sybil → Eclipse 是连续的升级路径。一旦对手从"看"升级到"做"，应用层边界（context 分层 / 私域市场 / 信誉隔离）全部会被直接穿透。
+> **结论**：节点间攻击防护不是"M11+ 锦上添花"，是"Havix 协议假设能成立的前提条件"。
+
+#### 5.4.1 当前已做的防护（密码学层 + 简单行为过滤）
+
+| 防护 | 位置 | 防什么 | 不足 |
+|---|---|---|---|
+| canonical message 签名 | `message-types.js` (P0-1) | senderId/type 篡改 | 不防网络层观察 |
+| credit note 内层签名 + senderId === issuerDid | `s-node.js` (P0-2) | 伪造 issuer | 不防 issuer 主动作恶 |
+| InviteToken.verifySelf() | `market.js` (P0-4) | 伪造 invite | 不防 issuer 滥发 |
+| issuerDid ↔ pubKey 绑定（first-seen wins） | `credit.js` (P1-3) | keypair 旋转攻击 | 不防首次注册即攻击 |
+| 仲裁 panel 排除 vouch 关联节点 | `arbitration.js` summonPanel | 直接串谋 | 不防间接串谋（无 vouch 关联但合谋） |
+| vouch-collusion 作为可仲裁类型 | `arbitration.js` | vouch 舞弊 | 事后惩罚，不预防 |
+| gossipsub handler 顶层 try/catch | `s-node.js` (P0-5) | handler 抛错 DoS | 不防资源耗尽（无 rate limit） |
+| Set/Map LRU 100K 上限 | 多处 (P1-lru) | 内存膨胀 | 不防流量耗尽 |
+| topology.js 注释提到 eclipse | `network/topology.js` | - | **仅注释，未实现** |
+
+#### 5.4.2 当前未做的防护（节点间攻击核心缺失）
+
+| 缺失 | 影响 | 当前位置 | 修复阶段 |
+|---|---|---|---|
+| **Relay 可见两端 peerId + 流量模式** | 网络层观察者可画图谱 | `network/tunnel.js` | M13+ Nym 适配器 |
+| **无 Rate limiting** | 恶意节点高频发消息耗 CPU | `s-node.js` `_pubsubHandler` | M11 加 |
+| **Sybil 防御薄弱** | 攻击者慢慢累积 vouch + reputation 入 panel / 入 jurorPool | `vouch.js` + `arbitration.js` | M11 加强 + M12 准入 |
+| **Eclipse 攻击无防御** | 攻击者控制某节点所有 DHT 邻居 | `network/dht.js` | M11 加 + M13 Rust 强化 |
+| **仲裁员串谋检测缺失** | 仅排除直接 vouch 关联，无"投票模式统计异常检测" | `arbitration.js` | M11 加 |
+| **仲裁员中途退出无惩罚** | 自动 abstain 处理了但没 slash | `arbitration.js` + `timeouts.js` | M11 加 |
+| **Front-running** | 市场消息时序可被利用抢订单 | `market.js` + GossipSub | M11 加 commit-reveal |
+| **Relay 选择无信任策略** | 随机选 relay，没选可信 relay | `network/tunnel.js` | M11 加 + M13 Nym 后可去 |
+| **peerId↔DID 绑定可观察建立** | 一次握手就建立映射，后续所有行为可关联 | `s-node.js` start() | M13+ DID↔peerId 解耦 |
+| **跨节点 issue credit 无反向 audit** | issuer 主动行为，无事后审计 | `credit.js` | M11 加审计接口 |
+
+#### 5.4.3 分类原则
+
+按"修复阶段"分四档：
+
+- **M11 必修**（不修会破坏多 App 共存假设）：Rate limiting / Sybil 防御加强 / Eclipse 检测 / 串谋统计检测 / 退出惩罚 / Front-running commit-reveal / issue credit 审计接口
+- **M12 必修**（不修会破坏 App 准入假设）：Sybil 防御在 App 准入场景下的强化 / vouch 质量加权
+- **M13 Rust 化必修**（不修会破坏论文假设可证伪性）：Nym mixnet 适配器 / DID↔peerId 解耦 / Eclipse 检测 Rust 强化
+- **M14+ 暂不处理**：Katzenpost 适配器（备选方案，Nym 不够用再做）
+
+#### 5.4.4 假设验证覆盖度（重要）
+
+明确登记：**当前 JS 实现只能验证论文假设的子集**，不能宣称验证了完整假设。
+
+| 假设 | 当前 JS 实现能否验证 | 完整验证需要 |
+|---|---|---|
+| 高认知个体在分层结构中能避免结构性塌缩 | ❌ 仅能验证"友善环境下涌现"部分 | M13+ Rust + mixnet |
+| 加权转换能涌现角色分工（FW-01） | ✅ 业务逻辑可验证 | 不依赖网络层 |
+| 仲裁 slash 机制防滥用 | ⚠️ 部分验证（防直接串谋） | M11 加统计检测后完整验证 |
+| 私域市场双重加密防冒充 | ✅ 应用层签名验证完整 | 不依赖网络层 |
+| 信誉不可降级 | ⚠️ 部分验证（防应用层篡改） | M13+ 防 Sybil + Eclipse 后完整验证 |
+| 在敌对环境下保护个体 | ❌ 完全无法验证 | M13+ Rust + mixnet + DID 解耦 |
+
+**含义**：内测反馈如果出现"敌对环境下假设不成立"的结论，**不能直接判定论文假设被证伪**——因为当前实现根本没机会验证敌对环境。必须先补齐 M11 节点间攻击防护 + M13 mixnet，再下结论。
+
 ---
 
 ## 6. 内测结束后的启动检查清单
@@ -213,11 +276,26 @@ M13+ 完成的标志：
 - **理由**：Nym / Katzenpost / Loopix 已解决网络层隐私，Havix 集成而非重写。Havix 团队规模与 Nym 不在一个量级，自建会拖垮协议层进度。
 - **替代方案**：通过 `TransportAdapter` 让 mixnet 可插拔，M13+ 实现 Nym 适配器作为第一个非 libp2p transport。
 
-### 决策 3：Havix 定位为"应用层协议"，不是"网络层协议"
-- **理由**：Nym 解决"通信不可追踪"但缺应用；Havix 解决"在追踪存在的前提下如何组织社会结构"。两者互补。
-- **含义**：Havix 的核心价值在 DID 分层 + credit + market + arbitration 这套社会学协议，不在网络层。Rust 化时网络层可外包，协议层必须自主可控。
+### 决策 3：Havix 假设论证是应用层问题，但假设验证必须包含网络层防御
 
-### 决策 4：P2 修复不阻断主线
+> **校正记录（2026-07-19）**：原表述"Havix 定位为应用层协议，网络层可外包"——这个二分法有误导性，本次校正。
+
+- **校正前的错误认知**：把"防观察者"（Nym/Katzenpost 做的）和"防身份降级"（Havix 做的）当作两种不同威胁，结论是"Havix 不与它们竞争，互补即可"。
+- **校正后的认知**：观察者和攻击者是同一威胁谱系的不同强度，不是两种威胁。被动观察 → 流量注入 → 节点劫持 → Sybil → Eclipse 是连续的升级路径。一旦对手从"看"升级到"做"，应用层边界（context 分层 / 私域市场 / 信誉隔离）全部会被直接穿透。
+- **正确的拆分**：
+  - **论文假设**：分层自组织网络是否能让高认知个体避免结构性塌缩——这是独立的社会学命题，与实现语言、与是否用 mixnet 无关
+  - **工程验证**：JS 实现只能验证"友善环境下的涌现"；要验证"敌对环境下能否保护个体"，必须 Rust + mixnet 才有机会被证伪
+- **含义**：mixnet 不是"工程优化"，是"让论文假设有机会被证伪的最小条件"。Rust 化时网络层不能简单"外包"，必须作为协议假设验证地基的一部分主动集成。
+
+### 决策 4：节点间攻击防护是 M11 的必修项，不是 M11+ 的可选项
+
+> **校正记录（2026-07-19）**：原 NEXT-STEPS.md 把节点间攻击防护混在 M13+ Rust 化债务里，本次拆出来单独成项。
+
+- **校正前**：节点间攻击防护（Sybil / Eclipse / 串谋检测 / Rate limiting 等）被默认为"Rust 化时一起做"。
+- **校正后认知**：这些防护中的一部分（Rate limiting / Sybil 防御加强 / Eclipse 检测 / 串谋统计检测 / 退出惩罚 / Front-running commit-reveal）不依赖 Rust，是 JS 实现就能做的，**M11 必须做**——否则 M11 多 App 共存假设的验证本身就是不可信的。
+- **详见**：[5.4 节点间攻击防护盘点](#54-节点间攻击防护盘点2026-07-19-新增)
+
+### 决策 5：P2 修复不阻断主线
 - **理由**：P2 是可维护性 / 性能 / 文档类，不影响协议设计验证。在 M11-M12 按需穿插，不安排专门冲刺。
 - **例外**：与多 App 隔离、审核机制相关的 P2 必须在对应阶段修复。
 
