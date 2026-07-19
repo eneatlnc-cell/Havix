@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.1 AppManifest + 解析 + 校验已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
+> 当前阶段：**M9.2 SDK 入口 + 7 大接口骨架 + mock SNode 已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -205,6 +205,47 @@ M9 阶段二第一步：把 Havix 节点的协议能力封装为 App 可调用�
 - permissions 必须在 28 项白名单中（无重复 / 非字符串拒绝）
 
 ✅ 全量回归 707/707 通过（M8.3 后 596 + M9.1 新增 111，无 regression）
+
+### M9.2 SDK 入口 + 7 大接口骨架 + mock SNode
+
+M9 阶段二第二步：把 M9.1 的 AppManifest + permissions + errors 串成 App 可调用的 SDK 工厂。`createApp(snode, manifest, options)` 返回 app 实例，自动装配 7 大子模块（context / market / credit / wiki / tunnel / arbitration / transport）+ 4 个辅助模块（ipfs / web / cli / state）。每个 mutation 方法在调用 snode 前先 `checkPermission(perms, 'xxx:yyy', { app: appName })`，缺权限抛 `PermissionDeniedError`；只读方法（list / isMember / getManifest / treasuryBalance / checkJurorEligibility 等）直接放行（与 M8.2 GET-only 精神一致）。
+
+**核心设计哲学（M9 理论修正的代码体现）**：
+
+1. **4-context sign/verify 不对称设计**：`sign(contextKey, data)` 受 Manifest.contexts 门控（未启用抛 `ContextNotEnabledError`），`verify(publicKey, signature, data)` 不受限制（被动行为，任意 context 签的消息都可验签）；`getAll()` / `getStatus()` 永远返回完整 4-context 状态面板（active=启用 / loaded=已派生但未启用），让用户感知完整身份模型——通过"不用 A/C/D"来体现隔离，而非通过"用全部 4 个"
+
+2. **严格 GET-only Web API**：`web.get()` / `web.mount()` 只允许 GET；不提供 `post/put/delete` 方法（访问得到 `undefined`）；`handle()` 对非 GET 请求返回 405 + hint "mutation 操作请到 REPL 执行对应 CLI 命令"。Web UI 上的 mutation 按钮只能弹窗显示 CLI 命令，让用户复制到 Havix REPL 执行——"协议即法律"
+
+3. **App 路由隔离**：所有 web 路径必须以 `/apps/<appName>/` 或 `/api/apps/<appName>/` 开头，防 App 越权注册其他 App 的路由
+
+4. **CLI 命令命名约定**：所有 App 注册的 CLI 命令必须以 `<appName>-` 开头 + kebab-case（防命名冲突）；与 `src/app/cli.js` 的 Command 类型对齐（`{ name, description, category, args, handler }`）
+
+**M9.2 范围**（14 个 SDK 源文件）：
+
+- ✅ `sdk/__mocks__/snode-mock.js`：mock SNode 实现，覆盖 M3-M7 全部公开 API（wiki / credit / tunnel / arbitration / market）+ libp2p.services.pubsub + ipfs.blockstore；纯内存记录所有调用到 `snode.calls[name]` 数组；支持 `mockImplementation` / `mockReturnValue` / `mockClear`；DEFAULT_DIDS 固定 4-context DID 便于断言；MockIdentity / MockWallet 类提供 sign/verify + 4-context 派生；blockstore.get 用 `async function*` 实现 AsyncGenerator（与真实 helia 一致）
+- ✅ `sdk/context.js`：4-context 子身份 API（`getAll()` 返回完整 4-context DID；`getEnabled()` 返回启用列表；`getStatus()` 返回 active/loaded 状态面板含 did/status/usedByApp/label/description；`sign(contextKey, data)` 受 Manifest.contexts 门控，未启用抛 `ContextNotEnabledError`；`verify(publicKey, signature, data)` 被动行为，委托 `publicKey.verify(data, sig)`）
+- ✅ `sdk/market.js`：私域市场 API 包装 M7 邀请市场协议（6 个权限门控：create/invite/join/publish/subscribe/leave；3 个只读无门控：list/isMember/getManifest；subscribe 通过 pubsub.subscribe 注册 handler 并记录到 `snode._marketSubscriptions`）
+- ✅ `sdk/credit.js`：Credit 流水 API（4 个权限门控：issue/consume/transfer/balance；`onReceived(callback)` 注册到 `snode._creditHandlers` 供 M9.3 AppManager 在 `_handleCreditMessage` 调用；amount 校验 `Number.isFinite(amount) && amount > 0` 拒绝 NaN/Infinity/负数/零）
+- ✅ `sdk/wiki.js`：维基 API 包装 M3 协议（3 个权限门控：publish/list/get；list 含 history/lineage/latest 子方法；get 含 isRoot 子方法；content 类型可以是 string 或 Uint8Array；parentCid null/空字符串视为根条目）
+- ✅ `sdk/tunnel.js`：隧道 API 包装 M5 协议（3 个权限门控：open/send/close；close 含 breakLink 子方法；返回 tunnelId 句柄，send 自动 round-robin 分配到各 relay）
+- ✅ `sdk/arbitration.js`：仲裁 API 包装 M6 协议（3 个权限门控：file/vote/resolve；summonPanel 也需 arbitration:file 权限；只读无门控：treasuryBalance/treasuryHistory/checkJurorEligibility；暴露常量 `VALID_TYPES = ['offer-breach', 'relay-malice', 'vouch-collusion']` / `VALID_VOTES = ['guilty', 'not-guilty', 'abstain']`）
+- ✅ `sdk/transport.js`：gossipsub 抽象（2 个权限门控：publish/subscribe；topic 校验：必须以 `/` 开头；禁止使用 `/s-network/market/` 前缀防误用 market topic；记录订阅到 `snode._transportSubscriptions`）
+- ✅ `sdk/ipfs.js`：IPFS 操作（2 个权限门控：add/get；`computeCid(bytes)` 纯计算不写盘无需权限，用 raw codec 0x55 + sha256 与 `src/protocol/wiki.js` 一致）
+- ✅ `sdk/web.js`：严格 GET-only Web 路由（`mount()` 静态目录 / `get()` GET API / `listRoutes()` / `hasRoute()` / `handle()` 派发请求；handle 对非 GET 返回 405 + hint；handler 抛错返回 500；未注册返回 404；显式不提供 post/put/delete）
+- ✅ `sdk/cli.js`：CLI 命令注册（`register(name, opts)` / `unregister(name)` / `listCommands()` / `hasCommand(name)` / `execute(name, args)`；命令名必须 `<appName>-` 前缀 + kebab-case；与 `src/app/cli.js` Command 类型对齐）
+- ✅ `sdk/state.js`：App 状态持久化（set/get/delete/clear/keys/entries/flush/load；M9.2 用内存 Map，flush/load 是 no-op；M9.3 接 `src/persistence.js` 写盘；persistPath = `<snode.config.dataDir>/ledgers/apps/<dataDir>/state.json`；value 预校验可 JSON 序列化早失败）
+- ✅ `sdk/app.js`：createApp 入口（归一化 manifest 为 AppManifest 实例；计算 dataDir：options > manifest > name；装配各子模块时检查 snode 能力，缺依赖置为 `null`，访问时通过 `_ensureModule(name)` 抛 `InvalidAppStateError`；stop() 清理订阅）
+- ✅ `sdk/index.js`：SDK 入口更新，导出所有子模块工厂 + createApp + createSnodeMock + DEFAULT_DIDS
+
+**子模块缺依赖处理**：装配时检查 snode 是否有对应能力（如 `snode.wallet` / `snode.wiki` / `snode.libp2p.services.pubsub`），缺失则置为 `null`。App 调用 null 子模块的方法时通过 `_ensureModule(name)` 抛 `InvalidAppStateError`，错误信息提示具体缺失的依赖。这让 App 可优雅降级（如仅用 market + cli 不用 tunnel 的 App 不需要 snode 有完整 tunnel 能力）。
+
+**M9.3 衔接**（M9.2 已预留接口，签名不变）：
+- `state.js` 的 `flush()` / `load()` 当前是 no-op，M9.3 接 `src/persistence.js` 的 `saveJsonAtomic` / `loadJson` 写盘
+- `credit.js` 的 `onReceived(callback)` 注册到 `snode._creditHandlers`，M9.3 AppManager 在 `_handleCreditMessage` 中按 appName 派发到对应 App 的 handler
+- `cli.js` 注册的命令在 M9.3 由 AppManager 汇总注入 `Cli` 实例，让 `app.<appName>-<command>` 在 REPL 可用
+
+✅ 全量回归 849/849 通过（M9.1 后 707 + M9.2 新增 142 = 849，无 regression）
+✅ SDK 单元测试 253/253 通过（mock SNode + 7 大子模块 + createApp 装配 + 端到端）
 
 ### M1 双平面传输基线
 
@@ -486,14 +527,29 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e + SDK，约 50 秒，共 707 个用例）
+# 全部测试（单元 + e2e + SDK，约 50 秒，共 849 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（707 个用例，全部通过）：
+测试覆盖（849 个用例，全部通过）：
+
+**M9.2 SDK 阶段（142 个）**
+- snode-mock 单元测试（12 个）：mock SNode 4-context DID / sign+verify / createMarket / issueCredit / transferCredit / establishTunnel / wiki.publishEntry / fileDispute / ipfs.blockstore / 自定义 dids / 自定义 ledgers
+- context API 单元测试（11 个）：getAll / getEnabled / getStatus（含未启用 context 显示 loaded）/ sign（启用+未启用抛 ContextNotEnabledError+非法 contextKey+非 Uint8Array）/ verify（被动行为）/ createContextApi 缺 wallet 抛错
+- market API 单元测试（14 个）：6 个权限门控（create/invite/join/publish/subscribe/leave）+ 参数校验 + 委托 snode + list/isMember/getManifest 只读无门控
+- credit API 单元测试（10 个）：issue/consume/transfer/balance + onReceived + amount 校验（NaN/Infinity/负数/零）
+- wiki API 单元测试（11 个）：publish/list/get/history/lineage/isRoot/latest + content 类型 + 缺 wiki 抛错
+- tunnel API 单元测试（10 个）：open/send/breakLink/close + 自定义 relayDids + 缺权限抛错
+- arbitration API 单元测试（12 个）：file/summonPanel/vote/resolve + 只读查询 + VALID_TYPES/VALID_VOTES 常量
+- transport API 单元测试（10 个）：publish/subscribe/unsubscribe + topic 校验 + 禁止 market 前缀
+- ipfs API 单元测试（9 个）：add+get 往返 / computeCid / 权限门控 / 不存在 cid 抛错
+- web API 单元测试（12 个）：get/mount/handle（200/500/405/404）/ 路径隔离 / 不重复注册 / 不提供 post/put/delete
+- cli API 单元测试（9 个）：register/unregister/listCommands/hasCommand/execute + 命令名前缀校验 + kebab-case
+- state API 单元测试（12 个）：set/get/delete/clear/keys/entries + persistPath 计算 + 不可序列化拒绝 + flush/load no-op
+- create-app 集成测试（13 个）：装配 7 大子模块 / manifestId / dataDir / manifest 归一化 / 缺依赖 null 处理 / _ensureModule / stop / 端到端
 
 **M9.1 SDK 阶段（111 个）**
 - permissions 单元测试（36 个）：白名单完整性（28 项权限 + 8 大 category + 权限名格式 + 唯一性）+ isValidPermission / validatePermissions（合法/空/非数组/未知/重复/非字符串）+ checkPermission（拥有/缺权限抛 PermissionDeniedError/非数组/错误信息含 app 名/code）+ hasPermission（不抛错）+ getPermissionsByCategory + Object.freeze 不可变性
@@ -588,14 +644,41 @@ havix/
 │   └── app/
 │       ├── cli.js                 命令行 REPL（M8.2-1/2/3 已实现：tokenize/parseArgs + 43 个命令 = 7 诊断 + 11 M3-M4 + 25 M5-M7）
 │       └── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化）
-├── sdk/                           Havix SDK（M9.1 新增）
-│   ├── index.js                   SDK 入口（导出 errors + permissions + manifest）
+├── sdk/                           Havix SDK（M9.1 + M9.2 已实现）
+│   ├── index.js                   SDK 入口（导出 errors + permissions + manifest + 7 大子模块工厂 + createApp + createSnodeMock）
 │   ├── errors.js                  7 个 SDK 错误类型（HavixSdkError 基类 + 6 个子类）
 │   ├── permissions.js             28 项权限白名单 + 6 个校验函数（isValidPermission / validatePermissions / checkPermission / hasPermission / getPermissionsByCategory）
-│   ├── manifest.js                AppManifest 类 + 极简 YAML 解析器 + validateManifest
+│   ├── manifest.js                AppManifest 类 + 极简 YAML 解析器 + validateManifest（M9.1）
+│   ├── context.js                 4-context 子身份 API（getAll/getStatus/sign/verify，M9.2）
+│   ├── market.js                  私域市场 API（create/invite/join/publish/subscribe/leave，M9.2）
+│   ├── credit.js                  Credit 流水 API（issue/consume/transfer/balance + onReceived，M9.2）
+│   ├── wiki.js                    维基 API（publish/list/get/history/lineage/latest/isRoot，M9.2）
+│   ├── tunnel.js                  隧道 API（open/send/breakLink/close，M9.2）
+│   ├── arbitration.js             仲裁 API（file/summonPanel/vote/resolve + 只读查询，M9.2）
+│   ├── transport.js               gossipsub 抽象（publish/subscribe + topic 校验，M9.2）
+│   ├── ipfs.js                    IPFS 操作（add/get + computeCid，M9.2）
+│   ├── web.js                     GET-only Web 路由（mount/get/handle，M9.2）
+│   ├── cli.js                     CLI 命令注册（register/unregister/execute，M9.2）
+│   ├── state.js                   App 状态持久化（M9.2 内存版，M9.3 接 src/persistence.js 写盘）
+│   ├── app.js                     createApp 入口（装配 7 大子模块 + 4 辅助模块，M9.2）
+│   ├── __mocks__/
+│   │   └── snode-mock.js          mock SNode（覆盖 M3-M7 + libp2p.pubsub + ipfs.blockstore，M9.2）
 │   └── __tests__/
-│       ├── permissions.test.js    权限白名单 + 校验函数单元测试（36 个）
-│       └── manifest.test.js       AppManifest + YAML 解析器单元测试（75 个）
+│       ├── permissions.test.js    权限白名单 + 校验函数单元测试（36 个，M9.1）
+│       ├── manifest.test.js       AppManifest + YAML 解析器单元测试（75 个，M9.1）
+│       ├── snode-mock.test.js     mock SNode 单元测试（12 个，M9.2）
+│       ├── context.test.js        4-context API 单元测试（11 个，M9.2）
+│       ├── market.test.js         私域市场 API 单元测试（14 个，M9.2）
+│       ├── credit.test.js         Credit 流水 API 单元测试（10 个，M9.2）
+│       ├── wiki.test.js           维基 API 单元测试（11 个，M9.2）
+│       ├── tunnel.test.js         隧道 API 单元测试（10 个，M9.2）
+│       ├── arbitration.test.js    仲裁 API 单元测试（12 个，M9.2）
+│       ├── transport.test.js      transport API 单元测试（10 个，M9.2）
+│       ├── ipfs.test.js           IPFS API 单元测试（9 个，M9.2）
+│       ├── web.test.js            Web API 单元测试（12 个，M9.2）
+│       ├── cli.test.js            CLI API 单元测试（9 个，M9.2）
+│       ├── state.test.js          state API 单元测试（12 个，M9.2）
+│       └── create-app.test.js     createApp 装配集成测试（13 个，M9.2）
 └── test/
     ├── persistence.test.js            M8.1 持久化工具单元测试（28 个）
     ├── persistence-restart.test.js    M8.1 重启恢复集成测试（11 个）
@@ -636,6 +719,8 @@ havix/
 | M8.1 持久化 | ✅ 已完成 | 6 registry + credit nonce 集合全部持久化（JSON + 同步原子写 + start 加载 / stop flush） |
 | M8.2 CLI 收口 | ✅ 已完成 | REPL 引擎 + 43 个命令（7 诊断 + 11 M3-M4 + 25 M5-M7）+ Web 面板（13 个 API + vis-network 拓扑）+ s-node.js 集成（startApp 可测试函数） |
 | M8.3 4 节点集成测试 | ✅ 已完成 | 4 节点 star 拓扑 harness + gossipsub 跨节点传播（vouch/wiki/credit 镜像）+ 持久化重启恢复 + nonce 重放保护 |
+| M9.1 AppManifest | ✅ 已完成 | 7 个 SDK 错误类型 + 28 项权限白名单 + AppManifest 类（11 字段）+ 极简 YAML 解析器 + 111 个单元测试 |
+| M9.2 SDK 接口 | ✅ 已完成 | createApp 入口 + 7 大子模块（context/market/credit/wiki/tunnel/arbitration/transport）+ 4 辅助模块（ipfs/web/cli/state）+ mock SNode + 253 个 SDK 测试 |
 
 ## 核心设计决策（M1 → M2 → M3 → M4 → M5 → M6 → M7 阶段递进）
 

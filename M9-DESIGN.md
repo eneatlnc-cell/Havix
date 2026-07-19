@@ -1007,13 +1007,13 @@ test('SDK 集成：App A 创建市场 → App B 加入 → 双方收到消息', 
 
 ### 11.1 子阶段拆分
 
-| 子阶段 | 内容 | 估时 | 测试增量 |
-| --- | --- | --- | --- |
-| **M9.1** | AppManifest + 解析 + 校验 + 权限白名单 | 中 | ~40 测试 |
-| **M9.2** | SDK 入口 + 7 大接口骨架 + mock SNode | 中 | ~70 测试 |
-| **M9.3** | AppManager + SNode 集成 + config 选项 | 中 | ~15 测试 |
-| **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 |
-| **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 |
+| 子阶段 | 内容 | 估时 | 测试增量 | 实际 |
+| --- | --- | --- | --- | --- |
+| **M9.1** | AppManifest + 解析 + 校验 + 权限白名单 | 中 | ~40 测试 | ✅ 111 测试 |
+| **M9.2** | SDK 入口 + 7 大接口骨架 + mock SNode | 中 | ~70 测试 | ✅ 253 测试 |
+| **M9.3** | AppManager + SNode 集成 + config 选项 | 中 | ~15 测试 | ⏳ |
+| **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 | ⏳ |
+| **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 | ⏳ |
 
 每个子阶段完成后跑全量回归，确认无 regression。
 
@@ -1134,10 +1134,11 @@ havix/                          # 主仓库
 
 ## 16. 下一步
 
-1. **你审阅本文档**，确认 SDK 设计、Manifest 字段、Web 路由方案是否合理
-2. 确认后开始 **M9.1 AppManifest + 解析 + 校验**实施
-3. M9.1 完成后停下来等你确认，再进 M9.2
+1. ✅ **M9.1 AppManifest + 解析 + 校验**已完成（111 测试）
+2. ✅ **M9.2 SDK 入口 + 7 大接口骨架 + mock SNode**已完成（253 SDK 测试 / 849 全量回归通过）
+3. **M9.3 AppManager + SNode 集成 + config 选项**：实现 `src/app/app-manager.js`，扫描 `apps/` 目录加载每个 App 的 manifest.yaml 并调用 `createApp(snode, manifest, options)` 装配；接入 `state.js` 真实持久化（写盘 `<dataDir>/ledgers/apps/<manifestId>/state.json`）；接入 `credit.js` 的 `onReceived` callback 派发；接入 `cli.js` 命令到 SNode 的 `Cli` 实例（`<appName>-<command>` 命名）；新增 config 选项 `--apps-dir` / `--no-apps`。M9.2 已预留接口签名不变。
+4. M9.3 完成后停下来等你确认，再进 M9.4
 
 ---
 
-**Last Updated**: M9 详细设计草案 · 含理论修正（4-context 取舍哲学 + GET-only 严格遵循）· 等待审阅
+**Last Updated**: M9.2 SDK 接口骨架已完成 · 全量回归 849/849 通过 · 下一步 M9.3 AppManager + SNode 集成
