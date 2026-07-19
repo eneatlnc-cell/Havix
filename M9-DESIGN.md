@@ -163,6 +163,45 @@ description: 邀请制翻译服务市场，credit 消费 + 仲裁保障
 entryPoint: ./index.js
 ```
 
+### 3.4 Context 取舍设计哲学（M9 理论修正）
+
+**核心理念**：Havix 的 4-context 隔离（A/B/C/D）不是"每个 App 都该用全部 4 个"，而是**该用哪个就用哪个，不该用的刻意不用，每个选择都有明确理由**。
+
+**翻译市场的取舍（最终方案）**：
+
+| Context | 是否使用 | 设计理由 |
+| --- | --- | --- |
+| **主 DID** | ✓（身份锚定） | 节点稳定身份，vouch 锚定对象，不直接参与业务 |
+| **context-A**（公共） | **✗ 刻意不用** | A 是"畅游互联网"的通用身份，**绝不能与具体业务关联**——若用 A 公告"我开了翻译市场"，A 与 B 立刻被关联，M2.1 的不可关联性保证就破功了。A 保持纯粹。 |
+| **context-B**（市场） | ✓（业务身份） | 翻译市场全部业务（offer / 接单 / 交付 / 验收 / 仲裁） |
+| **context-C**（隧道） | **✗ M10 暂不用** | 私聊身份暂无应用场景——讨价还价走 context-B 私域消息已加密，无需额外隧道。**但 App UI 必须显示 C 存在（"未启用"状态）让用户感知完整身份模型**。 |
+| **context-D**（维基） | **✗ 留给维基 App** | D 需 vouch 阈值（M3.2）才有意义——不是每个翻译市场用户都能编辑维基。D 在翻译市场内无实际用途，应留给专门的"维基 App"（M11-1 计划）。 |
+
+**为什么这是"突出验证理念"**：
+
+- 之前 `contexts: [B]` 是"被动选择"（不知道还有别的可选项）
+- 现在 `contexts: [B]` 是"**主动取舍**"——刻意不用 A/C/D，每个选择都有明确理由
+- 真正体现 Havix 设计哲学的是**通过不用 A/C/D 来体现隔离**，不是通过用全部 4 个
+- App 启动时显示完整 4-context 状态面板（含未使用的 A/C/D 的"未启用"标记），让用户**直观感知完整身份模型**，即使 App 没用到也"存在"
+
+**反例（错误设计）**：
+
+| ❌ 错误做法 | 为什么错 |
+| --- | --- |
+| 用 context-A 公告"我开了翻译市场" | A 与 B 立刻被关联，破坏 M2.1 不可关联性 |
+| 用 context-D 编辑"翻译规范维基" | D 需 vouch 才能编辑，不是所有翻译市场用户都能用——混淆编辑员门槛 |
+| 用 context-C 做"客户与译者私聊" | context-B 私域消息已加密，私聊走 C 是过度设计；C 应留给真正的 1v1 匿名通讯 App |
+| 用全部 4 个 context | 每个都浅用，等于都没用——4-context 隔离沦为口号 |
+
+**正确的"突出验证理念"做法**：
+
+1. **App 主动声明 contexts 字段**：Manifest 显式列出使用哪些 context
+2. **App 启动显示完整身份状态面板**：4-context 全部显示（含未启用的），让用户感知完整模型
+3. **每个"不用"的选择都有明确理由**：写进 App README，作为设计决策记录
+4. **不同 App 用不同 context 子集**：翻译市场 [B] / 维基 App [D] / 公告板 [A] / 私聊 App [C]——这才是 4-context 设计的真正价值
+
+
+
 ---
 
 ## 4. App 生命周期
@@ -251,22 +290,58 @@ const app = await createApp(snode, manifest, {
 
 ### 5.2 app.context
 
+获取本节点身份信息。**关键设计**：无论 App 实际使用哪些 context，都显示完整 4-context 状态面板（含未启用的），让用户感知完整身份模型。
+
 ```javascript
-// 获取本节点的 4-context 子身份
-const { A, B, C, D } = await app.context.getAll()
+// 获取本节点的 4-context 子身份（无论 App 是否使用，都全部返回）
+const { main, A, B, C, D } = await app.context.getAll()
+// → {
+//   main: 'did:havix:main:z...',     // 主 DID（身份锚定）
+//   A: 'did:havix:A:z...',           // context-A 子 DID
+//   B: 'did:havix:B:z...',           // context-B 子 DID
+//   C: 'did:havix:C:z...',           // context-C 子 DID
+//   D: 'did:havix:D:z...',           // context-D 子 DID
+// }
 
-// 获取指定 context 的 DID
-const contextB = await app.context.get('B')
-// → "did:havix:B:z..."
+// 获取本 App 启用的 context 列表（来自 Manifest.contexts）
+const enabledContexts = app.context.getEnabled()
+// → ['B']  （翻译市场只启用 B）
 
-// 用指定 context 签名
+// 获取完整状态面板（用于 App 启动时显示）
+const status = await app.context.getStatus()
+// → {
+//     main:     { did: 'did:havix:main:z...', status: 'active' },
+//     contextA: { did: 'did:havix:A:z...',     status: 'loaded',  usedByApp: false, reason: 'A 是互联网通行身份，不与业务关联' },
+//     contextB: { did: 'did:havix:B:z...',     status: 'active',  usedByApp: true,  reason: '业务身份' },
+//     contextC: { did: 'did:havix:C:z...',     status: 'loaded',  usedByApp: false, reason: '私聊身份，本 App 暂无场景' },
+//     contextD: { did: 'did:havix:D:z...',     status: 'loaded',  usedByApp: false, reason: '需 vouch 阈值，留给维基 App' },
+//   }
+
+// 用指定 context 签名（必须是 App 启用的 context，否则抛 PermissionDeniedError）
 const sig = await app.context.sign('B', messageBytes)
 // → { signature, signerPublicKey }
 
-// 验证其他节点签的消息
+// 验证其他节点签的消息（任意 context 都可验签，不受 App 启用限制）
 const valid = await app.context.verify(publicKey, signature, messageBytes)
 // → boolean
 ```
+
+**App 启动时身份状态面板（M9 SDK 标准输出）**：
+
+```
+应用：translation-market v1.0.0
+身份状态（4-context 完整模型）：
+  主 DID:    did:havix:main:z6Mk...    ✓ active  （身份锚定）
+  context-A: did:havix:A:z6Mk...      ✓ loaded  （未启用：互联网通行身份不与业务关联）
+  context-B: did:havix:B:z6Mk...      ✓ active  （业务身份，已用）
+  context-C: did:havix:C:z6Mk...      ✓ loaded  （未启用：私聊身份，本 App 暂无场景）
+  context-D: did:havix:D:z6Mk...      ✓ loaded  （未启用：需 vouch 阈值，留给维基 App）
+```
+
+**关键约束**：
+- `getAll()` 与 `getStatus()` 永远返回完整 4-context（让用户感知完整模型）
+- `sign()` 只允许 Manifest.contexts 列出的 context（防越权）
+- `verify()` 不受限制（任意 context 签的消息都可验签，因为验签是被动行为）
 
 ### 5.3 app.market
 
@@ -420,27 +495,73 @@ const content = await app.transport.ipfs.get(cid)
 
 ### 5.9 app.web
 
-注册 Web 路由到 Havix Web 面板：
+注册 Web 路由到 Havix Web 面板。**严格遵循 M8.2 GET-only 约束**——不破例，所有 mutation 走 CLI。
+
+**设计原则**（M9 理论修正）：
+
+> "协议即法律"——所有节点互动必须走 Havix 网络协议（gossipsub / 私域 topic / IPFS / 隧道），Web 面板只是观察窗口，不是控制面板。
 
 ```javascript
-// 静态文件
+// 静态文件（HTML/JS/CSS）
 app.web.mount('/apps/translation-market/', {
   type: 'static',
-  dir: './webui/',  // HTML/JS/CSS
+  dir: './webui/',
 })
 
-// API 端点
-app.web.api('/api/apps/translation-market/offers', async (req, res) => {
-  const offers = await listOffers()
-  return { offers }
+// GET API 端点（只读查询）
+app.web.get('/api/apps/translation-market/offers', async (req) => {
+  return { offers: await listOffers() }
 })
 
-// 动态路由
-app.web.api('/api/apps/translation-market/orders/:id', async (req, res) => {
-  const order = await getOrder(req.params.id)
-  return order
+app.web.get('/api/apps/translation-market/orders/:id', async (req) => {
+  return await getOrder(req.params.id)
 })
+
+app.web.get('/api/apps/translation-market/identity-status', async (req) => {
+  return await app.context.getStatus()  // 4-context 完整状态
+})
+
+// ❌ 不提供 POST/PUT/DELETE 接口
+// 所有 mutation 操作走 CLI（app.cli.register）
+// Web UI 上的 mutation 按钮显示 CLI 命令让用户复制到 REPL 执行
 ```
+
+**Web UI mutation 按钮交互**：
+
+当用户点击 Web UI 上的"发布需求"按钮时：
+
+```
+┌─────────────────────────────────────────────────┐
+│  发布翻译需求                                 × │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  此操作需在 CLI 执行，已为你生成命令：           │
+│                                                  │
+│  ┌───────────────────────────────────────────┐  │
+│  │ translate-publish --from zh --to en \     │  │
+│  │   --content "你的内容..." --reward 10     │  │
+│  └───────────────────────────────────────────┘  │
+│                                                  │
+│              [📋 复制命令]   [关闭]              │
+│                                                  │
+│  复制后到 REPL 提示符粘贴执行（havix> _）       │
+└─────────────────────────────────────────────────┘
+```
+
+**为什么这样设计**：
+
+| 选项 | 优点 | 缺点 | 评价 |
+| --- | --- | --- | --- |
+| Web API 直接执行 mutation | 体验流畅 | 破坏 GET-only 约束 / 引入 CSRF 风险 / 节点互动绕过协议层 | ❌ 不选 |
+| **Web 显示命令让用户复制** | 严格遵循协议 / 用户明确感知操作 / 与 M8.2 一致 | 多一步复制粘贴 | ✓ 选 |
+| Web 表单生成命令 + 一键复制 | 介于两者之间 | 仍需用户去 REPL 执行 | 后续 M10 视体验可加 |
+
+**SDK 接口约束**：
+
+- `app.web.mount()` 只允许注册静态文件路由
+- `app.web.get()` 只允许注册 GET 路由
+- SDK 不提供 `app.web.post()` / `app.web.put()` / `app.web.delete()` 接口
+- 强制开发者把 mutation 走 `app.cli.register()`
 
 ### 5.10 app.cli
 
@@ -674,12 +795,12 @@ name: empty-app
 version: 1.0.0
 capability: custom
 permissions:
-  - identity:context:A
+  - identity:context
   - ipfs:read
 minReputation: 0
 trustWeight: 0.5
 dataDir: empty-app
-contexts: [A]
+contexts: []  # 空数组：模板不预设使用哪些 context，由具体 App 自选
 description: 最小可运行 App 模板
 entryPoint: ./index.js
 ```
@@ -712,24 +833,43 @@ export async function stop(app) {
 
 ### 9.1 路由设计
 
-Havix Web 面板新增 `/apps/<app-name>/` 路由前缀：
+Havix Web 面板新增 `/apps/<app-name>/` 路由前缀。**严格遵循 M8.2 GET-only 约束**——所有 App API 都是 GET，无 mutation 接口：
 
 ```
 GET /apps/translation-market/                    # App 首页（HTML）
 GET /apps/translation-market/index.html          # 显式 HTML
 GET /apps/translation-market/static/*           # 静态资源（JS/CSS/图片）
-GET /api/apps/translation-market/offers         # App API
-POST /api/apps/translation-market/offers         # App API（注意：破坏 GET-only 约束）
+GET /api/apps/translation-market/offers         # 查询 offer 列表
+GET /api/apps/translation-market/orders/:id     # 查询订单详情
+GET /api/apps/translation-market/identity-status # 查询 4-context 身份状态
+GET /api/apps/translation-market/arbitrations    # 查询仲裁列表
+
+# ❌ 不允许 POST / PUT / DELETE
+# mutation 操作（发布 offer / 接单 / 验收 / 仲裁）走 CLI
 ```
 
-### 9.2 GET-only 约束的破例
+### 9.2 GET-only 约束（M9 理论修正）
 
-M8.2 Web 面板是 GET-only（无 mutation）。M9 App API 可能需要 POST（如发布 offer）。
+**原 M9 草案提议**：App API 可破例允许 POST/PUT/DELETE，配 CSRF token 防护。
 
-**M9 决策**：
-- App 的 mutation API（POST/PUT/DELETE）允许，但**必须走本地 127.0.0.1**
-- App API 自动继承 Host 头校验（P1-F）
-- App API 必须自带 CSRF 防护（要求 `X-App-Token` 头，token 在 App 启动时生成并打印到 stdout）
+**M9 修正决策**：**不允许破例**。
+
+理由：
+1. **协议即法律**——所有节点互动必须走 Havix 网络协议（gossipsub / 私域 topic / IPFS / 隧道）。Web 面板是观察窗口，不是控制面板。
+2. **M8.2 GET-only 约束不可破坏**——一旦破例，未来 App 都会跟风加 mutation API，约束沦为口号。
+3. **CLI 是唯一 mutation 入口**——M8.2 已建立此约束，M9 延续。
+4. **避免 CSRF / DNS rebinding 扩大攻击面**——破例需要额外的 token 机制，复杂度上升。
+5. **用户明确感知操作**——复制命令到 REPL 让用户对每笔操作有"我在签名一笔交易"的明确感知，而不是点个按钮就完成。
+
+**App Web UI 的 mutation 交互**：
+
+Web UI 上的所有 mutation 按钮（如"发布需求"、"接单"、"验收"、"发起仲裁"）：
+- 点击后弹窗显示对应 CLI 命令
+- 提供"复制命令"按钮
+- 用户复制到 Havix REPL（`havix> `）粘贴执行
+- 命令通过 SDK 调用协议层接口完成节点互动
+
+详见 §5.9 的 Web UI mutation 按钮交互示例。
 
 ### 9.3 WebPanel 修改
 
@@ -756,6 +896,14 @@ _handleAppRoute(req, res, path) {
   const [, , appName, ...rest] = path.split('/')
   const app = this.node.appManager.getApp(appName)
   if (!app) return this._sendJson(res, 404, { error: `App ${appName} not loaded` })
+  
+  // M9 理论修正：App 路由严格 GET-only
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return this._sendJson(res, 405, {
+      error: `App Web API 仅支持 GET（M9 理论修正：协议即法律，mutation 走 CLI）`,
+      hint: 'mutation 操作请到 REPL 执行对应 CLI 命令',
+    })
+  }
   
   return app.web.handle(req, res, '/' + rest.join('/'))
 }
@@ -932,7 +1080,49 @@ M9 完成 → 进入 M10 翻译市场
 
 ---
 
-## 15. 下一步
+## 15. App 代码仓库策略
+
+### 15.1 分阶段策略
+
+| 阶段 | App 来源 | 仓库位置 | 理由 |
+| --- | --- | --- | --- |
+| **M9–M11** | 内置 App（翻译市场 / 教学市场 / 维基 App） | **主仓库 `apps/` 子目录** | 内置 App 与协议层协同开发，绑定版本发布 |
+| **M12+** | 第三方 App | **独立仓库** | 第三方独立演进，通过 App Manifest 的 `repository` 字段声明源码位置 |
+
+### 15.2 主仓库 `apps/` 子目录的好处
+
+- **协议层（src/）和应用层（apps/）一起测试**，避免版本漂移
+- **SDK（sdk/）和 App 同步迭代**，破坏性变更能立即发现
+- **单一 CHANGELOG**，发布节奏一致
+- **App 加载器扫 `apps/` 目录即用**，无需下载
+- **测试覆盖完整**：协议层测试 + SDK 测试 + App 测试在同一 CI 流水线
+
+### 15.3 M12 第三方 App 独立仓库的必要性
+
+- 第三方独立迭代节奏
+- App 数字签名验证（防伪造）
+- App 注册中心需 `repository` 字段供审计追溯
+- App 作者用 context-A 子身份签名 Manifest，节点验签后才允许加载
+
+### 15.4 仓库目录结构（M9 后）
+
+```
+havix/                          # 主仓库
+├── src/                        # 协议层（M1-M8 已实现）
+├── sdk/                        # Havix SDK（M9 新增）
+├── apps/                       # App 代码（M9 新增）
+│   ├── empty-app/              # 参考模板（M9.5）
+│   └── translation-market/     # 第一个真实 App（M10）
+├── test/                       # 测试（含 SDK + App 集成测试）
+├── docs/                       # 文档（DEPLOY.md / ROADMAP.md / M9-DESIGN.md / ...）
+├── README.md
+├── package.json                # 主仓库依赖（含 sdk/ 子目录的本地引用）
+└── .gitignore
+```
+
+---
+
+## 16. 下一步
 
 1. **你审阅本文档**，确认 SDK 设计、Manifest 字段、Web 路由方案是否合理
 2. 确认后开始 **M9.1 AppManifest + 解析 + 校验**实施
@@ -940,4 +1130,4 @@ M9 完成 → 进入 M10 翻译市场
 
 ---
 
-**Last Updated**: M9 详细设计草案 · 等待审阅
+**Last Updated**: M9 详细设计草案 · 含理论修正（4-context 取舍哲学 + GET-only 严格遵循）· 等待审阅
