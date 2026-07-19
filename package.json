@@ -1,0 +1,53 @@
+{
+  "name": "havix",
+  "version": "0.1.0",
+  "description": "Havix — Haven of Affinity. 高认知个体自组织生境协议。去中心化传输 + 准入制空间 + 信誉锚定经济的 P2P overlay。",
+  "type": "module",
+  "main": "src/s-node.js",
+  "bin": {
+    "havix": "src/s-node.js"
+  },
+  "scripts": {
+    "start": "node src/s-node.js",
+    "dev": "node --watch src/s-node.js",
+    "test": "node --test 'test/**/*.test.js'",
+    "lint": "echo \"(TODO: M8 接入 eslint)\" && exit 0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "libp2p",
+    "ipfs",
+    "helia",
+    "p2p",
+    "decentralized",
+    "did",
+    "reputation",
+    "overlay-network"
+  ],
+  "author": "Havix Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@helia/bitswap": "^4.0.6",
+    "@helia/libp2p": "^1.0.6",
+    "@libp2p/bootstrap": "^12.0.26",
+    "@libp2p/crypto": "^5.1.21",
+    "@libp2p/gossipsub": "^16.0.4",
+    "@libp2p/identify": "^4.1.9",
+    "@libp2p/kad-dht": "^16.2.6",
+    "@libp2p/mdns": "^12.0.26",
+    "@libp2p/mplex": "^12.0.25",
+    "@libp2p/peer-id": "^6.0.12",
+    "@libp2p/ping": "^3.1.8",
+    "@libp2p/tcp": "^11.0.23",
+    "@multiformats/multiaddr": "^13.0.3",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.1",
+    "helia": "^7.1.0",
+    "libp2p": "^3.3.5",
+    "multiformats": "^14.0.4"
+  }
+}

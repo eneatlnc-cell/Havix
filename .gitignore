@@ -1,0 +1,49 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 运行时生成的节点数据（每个节点本地的 libp2p/helia 数据目录）
+.data/
+.data-*/
+.data-test-*/
+.data-m83-*/
+.havix-data/
+*.peerid
+*.key
+
+# 环境变量与本地配置
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+logs/
+
+# 测试输出
+test/output/
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 构建产物（若未来引入 TypeScript）
+dist/
+build/
+
+# 临时文件
+*.tmp
+*.bak
+.cache/
+
+# 发布打包产物
+havix-mvp.tar.gz
+havix-mvp.zip
+*.tar.gz.bak

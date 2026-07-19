@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Havix — Haven of Affinity</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg-soft: #131829;
+    --bg-card: #1a2038;
+    --fg: #e6ecff;
+    --fg-muted: #8a93b8;
+    --accent: #6ee7ff;
+    --accent-2: #b794f6;
+    --accent-3: #fbbf24;
+    --danger: #f87171;
+    --border: rgba(110, 231, 255, 0.15);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at top right, rgba(110, 231, 255, 0.08), transparent 50%),
+      radial-gradient(ellipse at bottom left, rgba(183, 148, 246, 0.06), transparent 50%);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(110, 231, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(110, 231, 255, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse at center, black, transparent 70%);
+  }
+  .hero-content { position: relative; z-index: 2; }
+  .hero-tag {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 24px;
+    background: rgba(110, 231, 255, 0.05);
+  }
+  .hero h1 {
+    font-size: clamp(48px, 9vw, 120px);
+    font-weight: 900;
+    letter-spacing: -3px;
+    line-height: 0.95;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent-2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-sub {
+    font-size: clamp(18px, 2.4vw, 26px);
+    color: var(--fg-muted);
+    font-weight: 300;
+    max-width: 680px;
+    margin-bottom: 8px;
+  }
+  .hero-sub strong { color: var(--accent); font-weight: 500; }
+  .hero-meta {
+    margin-top: 40px;
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+  .hero-meta span::before {
+    content: '◆';
+    color: var(--accent);
+    margin-right: 8px;
+    font-size: 10px;
+  }
+
+  /* SECTION */
+  section { padding: 100px 0; position: relative; }
+  .section-num {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    margin-bottom: 12px;
+  }
+  h2 {
+    font-size: clamp(32px, 4.5vw, 48px);
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 24px;
+    line-height: 1.1;
+  }
+  h3 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--accent);
+  }
+  p { color: var(--fg-muted); margin-bottom: 16px; max-width: 720px; }
+  p strong { color: var(--fg); font-weight: 500; }
+
+  /* ARCHITECTURE DIAGRAM */
+  .arch {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin: 40px 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  .arch-layer {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background: rgba(255,255,255,0.02);
+    position: relative;
+  }
+  .arch-layer:last-child { margin-bottom: 0; }
+  .arch-layer-title {
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .arch-layer-body { color: var(--fg-muted); font-size: 13px; }
+  .arch-divider {
+    text-align: center;
+    color: var(--accent-2);
+    margin: 16px 0;
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+
+  /* DUAL PLANE */
+  .planes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 40px 0;
+  }
+  .plane {
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .plane-public {
+    background: linear-gradient(135deg, rgba(110, 231, 255, 0.08), rgba(110, 231, 255, 0.02));
+    border: 1px solid rgba(110, 231, 255, 0.25);
+  }
+  .plane-private {
+    background: linear-gradient(135deg, rgba(183, 148, 246, 0.08), rgba(183, 148, 246, 0.02));
+    border: 1px solid rgba(183, 148, 246, 0.25);
+  }
+  .plane-label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    margin-bottom: 12px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .plane-public .plane-label { color: var(--accent); }
+  .plane-private .plane-label { color: var(--accent-2); }
+  .plane h3 { color: var(--fg); margin-bottom: 16px; }
+  .plane ul { list-style: none; padding: 0; }
+  .plane li {
+    padding: 8px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.06);
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+  .plane li:last-child { border-bottom: none; }
+  .plane li::before {
+    content: '▸';
+    color: var(--accent);
+    margin-right: 10px;
+  }
+  .plane-private li::before { color: var(--accent-2); }
+
+  /* CARDS */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin: 40px 0;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    transition: all 0.3s;
+  }
+  .card:hover {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(110, 231, 255, 0.1);
+  }
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 18px;
+    color: var(--bg);
+    font-weight: 900;
+  }
+  .card h4 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    color: var(--fg);
+  }
+  .card p { font-size: 14px; margin-bottom: 0; }
+
+  /* COMPARISON */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin: 40px 0;
+    border: 1px solid var(--border);
+  }
+  .compare-cell {
+    background: var(--bg-card);
+    padding: 28px 24px;
+  }
+  .compare-cell.head {
+    background: var(--bg-soft);
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .compare-cell.head.havix { color: var(--accent); }
+  .compare-cell.head.tor { color: var(--danger); }
+  .compare-cell.head.discord { color: var(--accent-3); }
+  .compare-cell .row-label {
+    font-size: 11px;
+    color: var(--fg-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .compare-cell .row-value {
+    font-size: 14px;
+    color: var(--fg);
+  }
+  .compare-cell.is-havix { background: rgba(110, 231, 255, 0.03); }
+
+  /* TIMELINE */
+  .timeline {
+    margin: 40px 0;
+    position: relative;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 24px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2), transparent);
+  }
+  .tl-item {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+    position: relative;
+  }
+  .tl-marker {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: var(--accent);
+    font-size: 14px;
+    z-index: 2;
+    position: relative;
+    margin-left: 0;
+  }
+  .tl-body {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+  .tl-body h4 {
+    color: var(--fg);
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .tl-body .tl-tag {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(110, 231, 255, 0.1);
+    padding: 2px 10px;
+    border-radius: 100px;
+    margin-bottom: 10px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .tl-body p { font-size: 14px; margin-bottom: 8px; }
+  .tl-body .tl-output {
+    font-size: 12px;
+    color: var(--accent-3);
+    font-family: "JetBrains Mono", monospace;
+    margin-top: 8px;
+  }
+
+  /* QUOTE */
+  .quote {
+    margin: 60px 0;
+    padding: 40px;
+    border-left: 3px solid var(--accent);
+    background: linear-gradient(90deg, rgba(110, 231, 255, 0.04), transparent);
+    border-radius: 0 12px 12px 0;
+  }
+  .quote p {
+    font-size: 22px;
+    font-style: italic;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  .quote .quote-author {
+    margin-top: 16px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-style: normal;
+  }
+
+  /* STATS */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    margin: 50px 0;
+    text-align: center;
+  }
+  .stat-num {
+    font-size: 56px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* DECISION TABLE */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 40px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  td { color: var(--fg-muted); }
+  td:first-child { color: var(--accent-2); font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  td:nth-child(2) { color: var(--fg); font-weight: 500; }
+  tr:hover { background: rgba(110, 231, 255, 0.02); }
+
+  /* FOOTER */
+  footer {
+    padding: 60px 0 40px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--fg-muted);
+    font-size: 13px;
+  }
+  footer .logo {
+    font-size: 24px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+  .disclaimer {
+    max-width: 700px;
+    margin: 30px auto 0;
+    padding: 20px;
+    background: var(--bg-soft);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    text-align: left;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .planes { grid-template-columns: 1fr; }
+    .compare { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .tl-item { grid-template-columns: 60px 1fr; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container hero-content">
+    <div class="hero-tag">HAVIX PROTOCOL · v0.1 DRAFT</div>
+    <h1>Havix</h1>
+    <div class="hero-sub">Haven of Affinity —— <strong>高认知个体自组织生境协议</strong></div>
+    <div class="hero-meta">
+      <span>去中心化传输</span>
+      <span>准入制空间</span>
+      <span>信誉锚定经济</span>
+      <span>P2P Overlay</span>
+    </div>
+  </div>
+</section>
+
+<!-- VISION -->
+<section>
+  <div class="container">
+    <div class="section-num">01 / VISION</div>
+    <h2>不是暗网，不是 DAO，<br>不是去中心化的 Discord。</h2>
+    <p>Havix 是去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。</p>
+    <p>当主流集权系统的资源抽水比例过高、内卷失控时，高认知个体可以通过构建平行网络实现生存与意义的自我维系。Havix 是这一主张的技术验证载体——<strong>不推翻，但绕开</strong>。</p>
+
+    <div class="quote">
+      <p>"集权系统的反面不是无政府，是分层可见性 + 准入自治。完全开放的乌托邦才是社会学上不成立的。"</p>
+      <div class="quote-author">— Havix 设计哲学</div>
+    </div>
+
+    <div class="stats">
+      <div>
+        <div class="stat-num">18</div>
+        <div class="stat-label">核心决策</div>
+      </div>
+      <div>
+        <div class="stat-num">4</div>
+        <div class="stat-label">DID 上下文</div>
+      </div>
+      <div>
+        <div class="stat-num">8</div>
+        <div class="stat-label">MVP 里程碑</div>
+      </div>
+      <div>
+        <div class="stat-num">0</div>
+        <div class="stat-label">中心服务器</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section style="background: var(--bg-soft);">
+  <div class="container">
+    <div class="section-num">02 / POSITIONING</div>
+    <h2>它是什么，不是什么</h2>
+    <p>三个常被混淆的产品形态，逐项澄清。</p>
+
+    <div class="compare">
+      <div class="compare-cell head havix">Havix</div>
+      <div class="compare-cell head tor">Tor</div>
+      <div class="compare-cell head discord">Discord</div>
+
+      <div class="compare-cell is-havix">
+        <div class="row-label">匿名性</div>
+        <div class="row-value">单跳 relay + 信誉问责</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">匿名性</div>
+        <div class="row-value">三跳洋葱，绝对匿名</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">匿名性</div>
+        <div class="row-value">无</div>
+      </div>
+
+      <div class="compare-cell is-havix">
+        <div class="row-label">延迟</div>
+        <div class="row-value">低（1 跳）</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">延迟</div>
+        <div class="row-value">高（3 跳）</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">延迟</div>
+        <div class="row-value">最低</div>
+      </div>
+
+      <div class="compare-cell is-havix">
+        <div class="row-label">传输层</div>
+        <div class="row-value">完全去中心化</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">传输层</div>
+        <div class="row-value">去中心化</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">传输层</div>
+        <div class="row-value">中心化服务器</div>
+      </div>
+
+      <div class="compare-cell is-havix">
+        <div class="row-label">空间治理</div>
+        <div class="row-value">创建者主权 + 临时仲裁团</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">空间治理</div>
+        <div class="row-value">无（纯传输）</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">空间治理</div>
+        <div class="row-value">Discord 公司</div>
+      </div>
+
+      <div class="compare-cell is-havix">
+        <div class="row-label">经济模型</div>
+        <div class="row-value">Reputation + Credit 双轨</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">经济模型</div>
+        <div class="row-value">无</div>
+      </div>
+      <div class="compare-cell">
+        <div class="row-label">经济模型</div>
+        <div class="row-value">Nitro 订阅</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section>
+  <div class="container">
+    <div class="section-num">03 / ARCHITECTURE</div>
+    <h2>四层协议栈</h2>
+    <p>从底层传输到应用寄生，每一层职责清晰。应用层不直接使用传输层，必须经过身份层与协议层。</p>
+
+    <div class="arch">
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ 应用层（寄生）</div>
+        <div class="arch-layer-body">维基 SPA · 市场 SPA（任意）· 私聊隧道 · CLI 可视化</div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ 身份层</div>
+        <div class="arch-layer-body">主 DID → context 派生（A/B/C/D）· HKDF 不可关联</div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ 协议层（公共 / 私域）</div>
+        <div class="arch-layer-body">维基协议 · 市场协议 · Offer/Credit · Vouch/Slash</div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ 经济层</div>
+        <div class="arch-layer-body">Reputation(累积) ⇄ Credit(可消耗) · Faucet 冻结等额信誉 · 5 人临时仲裁团 → slash 50 赔 + 50 金库</div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ 传输层</div>
+        <div class="arch-layer-body">libp2p · gossipsub · 单跳 relay（概率轮换 20%/epoch）· IPFS · noise E2E · 电路硬切换</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top: 60px;">双平面隔离</h3>
+    <p>可见性在协议层硬性切分，不靠加密兜底。私域 CID 绝对不进 DHT，只在私有 topic 内分发。</p>
+
+    <div class="planes">
+      <div class="plane plane-private">
+        <div class="plane-label">PRIVATE PLANE</div>
+        <h3>私域平面</h3>
+        <ul>
+          <li>私有 gossipsub topic</li>
+          <li>topic 名 = sha256(邀请令牌)</li>
+          <li>消息体 = 令牌派生密钥再加密</li>
+          <li>市场 SPA 分发</li>
+          <li>私聊电路协商</li>
+          <li>Credit 流水</li>
+        </ul>
+      </div>
+      <div class="plane plane-public">
+        <div class="plane-label">PUBLIC PLANE</div>
+        <h3>公共平面</h3>
+        <ul>
+          <li>gossipsub mesh（邻居发现、心跳）</li>
+          <li>KadDHT（仅维基 CID 寻址）</li>
+          <li>Rendezvous（跨网段发现）</li>
+          <li>mdns（局域网自动发现）</li>
+          <li>公开广播、维基读取</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CORE MECHANISMS -->
+<section style="background: var(--bg-soft);">
+  <div class="container">
+    <div class="section-num">04 / MECHANISMS</div>
+    <h2>四个核心机制</h2>
+    <p>每一处都对得上论文主张。这是社会学命题在协议层的可验证实现。</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">Ⓐ</div>
+        <h4>4-Context DID 派生</h4>
+        <p>主 DID 派生 4 个不可关联的子身份：A 公开畅游、B 市场、C 私聊、D 维基编辑。同一节点在不同场景下使用不同身份，外部观察者无法关联。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">Ⓑ</div>
+        <h4>Reputation-Credit 双轨</h4>
+        <p>高信誉节点签发 Credit 时冻结等额自身信誉。每张 Credit 都有对应冻结的信誉背书，不能凭空印。作恶则 slash 冻结部分。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">Ⓒ</div>
+        <h4>临时仲裁团</h4>
+        <p>5 个高信誉节点随机抽取，排除 vouch 关联防串谋。多数裁决，slash 50% 赔受害者、50% 进金库。治理不是投票，是行会自治。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">Ⓓ</div>
+        <h4>单跳 Relay + 多链路对冲</h4>
+        <p>3 条并行 relay 各传 1/3 流量。单个 relay 被攻破只能看到片段。relay 由高信誉节点承担，作恶会损失长期信誉——用信誉换延迟。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ECONOMY -->
+<section>
+  <div class="container">
+    <div class="section-num">05 / ECONOMY</div>
+    <h2>信誉即货币</h2>
+    <p>不用真钱。真钱会引入交易所这个中心化漏洞，违背去中心化主张。Havix 用<strong>信誉本身</strong>作为发行凭证的锚定物。</p>
+
+    <div class="arch">
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ Faucet 机制</div>
+        <div class="arch-layer-body">
+          高信誉节点 Alice (rep=80) → 签发 10 credit 给 Bob<br>
+          → Alice 信誉冻结 10，可用 70，冻结 10<br>
+          → Bob 获得 10 credit（可消费任何 offer）<br>
+          → Bob 消费 credit → Alice 冻结部分释放
+        </div>
+      </div>
+      <div class="arch-divider">↓ 如果纠纷</div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ Slash 机制</div>
+        <div class="arch-layer-body">
+          Bob 付了 credit 但 Carol 没交付 → 发起 arbitration<br>
+          → 仲裁团调查 IPFS 上的 credit 流水<br>
+          → 裁决 guilty → Carol 冻结部分释放给 Bob（50%）+ 进金库（50%）<br>
+          → 治理不武器化：slash 只动冻结部分，不动可用信誉
+        </div>
+      </div>
+    </div>
+
+    <div class="quote">
+      <p>"高认知个体不需要法定货币，他们自身的认知信誉就是发行凭证。S 国的资源抽水在这里失效——因为你抽的不是钱，是 peer-to-peer 的信用关系。"</p>
+      <div class="quote-author">— Havix 经济模型论证</div>
+    </div>
+  </div>
+</section>
+
+<!-- TOPOLOGY -->
+<section style="background: var(--bg-soft);">
+  <div class="container">
+    <div class="section-num">06 / TOPOLOGY</div>
+    <h2>混合拓扑</h2>
+    <p>不是纯 DHT，不是中心化网络。Gossip Mesh + Rendezvous + 门控 KadDHT 的混合形态。</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">①</div>
+        <h4>局域网 mdns</h4>
+        <p>同子网节点自动发现，无需配置。开发与本地测试的默认机制。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">②</div>
+        <h4>Rendezvous 跨网段</h4>
+        <p>由高信誉节点自愿承担 rendezvous point。准入门槛与 relay 复用：动态阈值（前 30%）+ 3 vouch。无固定 bootstrap。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">③</div>
+        <h4>门控 KadDHT</h4>
+        <p>仅公共维基 CID 进 DHT。私域市场 CID 绝对不进 DHT。门控在协议层硬编码：if (privateCid) throw。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">④</div>
+        <h4>双平面隔离</h4>
+        <p>同一组节点，两个平面。私域流量走私有 topic，公共流量走 mesh。可见性在协议层硬切分。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ECOSYSTEM -->
+<section>
+  <div class="container">
+    <div class="section-num">07 / ECOSYSTEM</div>
+    <h2>私域生态</h2>
+    <p>Havix 不定义应用，只定义协议。每个私域市场 = 一个 App，通过 manifest 声明能力需求。S 网络本身不知道它托管了什么应用。</p>
+
+    <div class="arch">
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ Havix Protocol Spec</div>
+        <div class="arch-layer-body">协议规范，语言无关。JS 是第一个参考实现，未来可有 Rust/Go/Python 实现。</div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ Havix App Manifest</div>
+        <div class="arch-layer-body">
+          name / version / capability / permissions / invite_token_format / spa_cid / min_reputation / trust_weight<br>
+          每个市场是一个 App，第三方开发者可写新 App。
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-layer-title">▸ Reputation Portability</div>
+        <div class="arch-layer-body">
+          主 DID 信誉 = Σ(context 信誉 × App 权重)<br>
+          翻译市场(0.8) + 教学市场(0.5) + 维基编辑(1.0) → 主 DID 全局信用<br>
+          → 跨场景准入凭证
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top: 32px;"><strong>FW-01（推迟）</strong>：App 信任权重审核采用"自然涌现"方案——权重不由谁指定，而是通过"被多少高信誉节点使用"动态计算。阶段一无第三方 App，不存在刷分问题。</p>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section style="background: var(--bg-soft);">
+  <div class="container">
+    <div class="section-num">08 / ROADMAP</div>
+    <h2>MVP 八里程碑</h2>
+    <p>每个里程碑独立可演示。不依赖后续里程碑，不推翻前步。按顺序推进，不并行。</p>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-marker">M1</div>
+        <div class="tl-body">
+          <span class="tl-tag">TRANSPORT</span>
+          <h4>双平面传输基线</h4>
+          <p>plaintext → noise，初始化双平面。KadDHT 门控，rendezvous client。</p>
+          <div class="tl-output">▸ 双节点 mdns 自动发现 + 跨网段 rendezvous 连接</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M2</div>
+        <div class="tl-body">
+          <span class="tl-tag">IDENTITY</span>
+          <h4>4-Context DID 派生</h4>
+          <p>HKDF 派生 A/B/C/D 四个不可关联子身份。主 DID = ed25519 私钥哈希。</p>
+          <div class="tl-output">▸ 4 个子 DID 不可关联（密码学验证）</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M3</div>
+        <div class="tl-body">
+          <span class="tl-tag">WIKI</span>
+          <h4>维基协议</h4>
+          <p>CID 广播 + 编辑员签名校验。编辑员资格 = N 个高信誉节点 vouch 累积到阈值。</p>
+          <div class="tl-output">▸ 维基条目发布、签名校验、无资格写入被拒</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M4</div>
+        <div class="tl-body">
+          <span class="tl-tag">ECONOMY</span>
+          <h4>Credit 双轨</h4>
+          <p>Faucet + 冻结账本。Credit 凭证 = IPFS 上的签名 JSON。消费时 nonce 公开作废。</p>
+          <div class="tl-output">▸ Credit 流水 IPFS 链上追溯</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M5</div>
+        <div class="tl-body">
+          <span class="tl-tag">RELAY</span>
+          <h4>单跳 Relay + 多链路对冲</h4>
+          <p>libp2p stream + noise + 单跳 relay。准入：动态阈值 + 3 vouch。轮换：20%/epoch。</p>
+          <div class="tl-output">▸ 3 条并行 relay 各传 1/3 流量，单点泄露只看到片段</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M6</div>
+        <div class="tl-body">
+          <span class="tl-tag">GOVERNANCE</span>
+          <h4>临时仲裁团</h4>
+          <p>5 个高信誉节点随机抽取，排除 vouch 关联。多数裁决，slash 50 赔 + 50 金库。</p>
+          <div class="tl-output">▸ 完整仲裁流程跑通，slash 自执行</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M7</div>
+        <div class="tl-body">
+          <span class="tl-tag">PRIVATE</span>
+          <h4>邀请制市场</h4>
+          <p>令牌签发 + 私有 topic + SPA 拉取。topic 名 = sha256(令牌)，消息体双重加密。</p>
+          <div class="tl-output">▸ 私域不可见性通过 traffic analysis 验证</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-marker">M8</div>
+        <div class="tl-body">
+          <span class="tl-tag">INTEGRATION</span>
+          <h4>CLI 收口 + 集成测试</h4>
+          <p>命令补全、信誉持久化、4 节点集成测试。完整场景跑通：组网 → 维基 → offer → 仲裁 → 隧道 → 市场 → 自愈。</p>
+          <div class="tl-output">▸ 原规格所有测试步骤 1-6 通过</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DECISIONS -->
+<section>
+  <div class="container">
+    <div class="section-num">09 / DECISIONS</div>
+    <h2>18 个核心决策</h2>
+    <p>所有设计决策已锁定。每一项都对得上论文主张。</p>
+
+    <table>
+      <thead>
+        <tr><th>#</th><th>层</th><th>决策点</th><th>选择</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01</td><td>架构</td><td>整体形态</td><td>CLI 节点 + 本地面板</td></tr>
+        <tr><td>02</td><td>架构</td><td>匿名性</td><td>vouch-anchored overlay</td></tr>
+        <tr><td>03</td><td>架构</td><td>简化洋葱</td><td>单跳 relay + 多链路对冲</td></tr>
+        <tr><td>04</td><td>身份</td><td>DID 策略</td><td>4 context 派生（A/B/C/D）</td></tr>
+        <tr><td>05</td><td>协议</td><td>私域不可见语义</td><td>内容加密 + 邀请令牌</td></tr>
+        <tr><td>06</td><td>协议</td><td>Relay 准入</td><td>动态阈值（前 30%）+ 3 vouch</td></tr>
+        <tr><td>07</td><td>协议</td><td>市场令牌</td><td>创建者签发</td></tr>
+        <tr><td>08</td><td>协议</td><td>Relay 轮换</td><td>概率 20%/epoch</td></tr>
+        <tr><td>09</td><td>协议</td><td>电路迁移</td><td>硬切换 + 应用层重连</td></tr>
+        <tr><td>10</td><td>经济</td><td>经济模型</td><td>Reputation + Credit 双轨</td></tr>
+        <tr><td>11</td><td>经济</td><td>Faucet 机制</td><td>签发 credit 时冻结等额信誉</td></tr>
+        <tr><td>12</td><td>治理</td><td>Slash 分配</td><td>50 赔 + 50 金库（暂冻结）</td></tr>
+        <tr><td>13</td><td>部署</td><td>拓扑语义</td><td>双平面隔离</td></tr>
+        <tr><td>14</td><td>部署</td><td>跨网段发现</td><td>Rendezvous（非固定 bootstrap）</td></tr>
+        <tr><td>15</td><td>部署</td><td>KadDHT 用途</td><td>仅公共维基 CID</td></tr>
+        <tr><td>16</td><td>生态</td><td>信誉汇总</td><td>加权转换（context × App 权重）</td></tr>
+        <tr><td>17</td><td>生态</td><td>App 权重审核</td><td>自然涌现（FW-01 推迟）</td></tr>
+        <tr><td>18</td><td>命名</td><td>官方释义</td><td>Haven of Affinity（不用"庇护"）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- THESIS MAPPING -->
+<section style="background: var(--bg-soft);">
+  <div class="container">
+    <div class="section-num">10 / THESIS</div>
+    <h2>每一处都对应论文主张</h2>
+    <p>Havix 不是先有技术再找用途。它的每一处设计都是从论文命题反推出来的。</p>
+
+    <table>
+      <thead>
+        <tr><th>论文主张</th><th>Havix 实现</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>高认知个体自我维系</td><td>高信誉节点 Faucet 签发 Credit</td></tr>
+        <tr><td>平行网络</td><td>P2P overlay 完全脱离中心服务器</td></tr>
+        <tr><td>无中心治理</td><td>临时仲裁团 + 信誉 slash 自执行</td></tr>
+        <tr><td>不推翻但绕开</td><td>传输层不可见性 + 准入制空间</td></tr>
+        <tr><td>结构性困境</td><td>Slash 只动冻结部分，治理不武器化</td></tr>
+        <tr><td>高认知者自治</td><td>Relay/Rendezvous 准入门槛 + 编辑员资格</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="logo">Havix</div>
+    <div>Haven of Affinity · 高认知个体自组织生境协议</div>
+    <div style="margin-top: 8px;">v0.1.0-draft · 设计阶段</div>
+
+    <div class="disclaimer">
+      <strong>免责声明</strong><br><br>
+      Havix 仅用于学术验证目的，不涉及任何现实政治或商业用途。所有消息内容和测试数据均使用虚构示例，不涉及任何敏感或真实人类信息。公共层协议仅用于演示认知价值的去中心化交换，不替代任何现实法律或治理系统。不追求绝对匿名性，不构成对任何现实司法管辖的规避。所有经济机制（Reputation/Credit）仅作为协议内部记账，不构成任何金融工具。
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
