@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.3 AppManager + SNode 集成 + config 选项已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
+> 当前阶段：**M9.4 Web 面板路由扩展 + App API 已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -268,6 +268,39 @@ M9 阶段二第三步：把 M9.2 的 SDK 工厂接入真实 SNode 生命周期�
 - `test/config-apps.test.js`（9 个测试）：DEFAULT_CONFIG 含 apps/appsDir / parseArgv 解析 `--no-apps` / `--apps=false` / `--apps=true` / `--apps` / `--apps-dir <path>` / `--apps-dir=<path>` / 不传时 undefined / 同时设置 / `--no-apps + --apps-dir`
 
 ✅ 全量回归 901/901 通过（M9.2 后 849 + M9.3 新增 52 = 901，无 regression）
+
+### M9.4 Web 面板路由扩展 + App API
+
+M9 阶段二第四步：把 WebPanel 与 AppManager 接通。新增 `/apps/<appName>/...` 与 `/api/apps/<appName>/...` 路由分发——WebPanel 收到 `apps` 前缀请求时委托给 `appManager.handleAppWebRequest(appName, subPath, req)`，由 AppManager 转发到对应 App 的 `app.web.handle(subPath, req)`（M9.2 SDK 接口）；新增 `/api/apps` 端点列出已加载 App 元信息（`listAppMeta`），返回 `{ ok, count, apps }` 结构；`/apps` 返回 HTML 索引页（暗色主题 + App 列表表格 + 跳转链接）；HTML 拓扑首页侧边栏新增 `Apps（M9.4）` 区块显示 AppManager 启用状态 + App 列表 + 跳转链接；`/api/status` 新增 `apps: { enabled, count, names }` 字段；AppManager 未启用时所有 `/apps/` 与 `/api/apps/...` 路径返回 503 + 提示 `--apps` 开启。
+
+**严格 GET-only 约束（M9 理论修正）**：App Web API 不破例——所有 mutation 走 CLI。POST/PUT/DELETE 返回 405，hint 提示"协议即法律，mutation 走 CLI"。
+
+**核心交付**：
+
+- ✅ `src/app/web-panel.js` `_handle`：早期分流 `/apps/` 与 `/api/apps/` 前缀请求到新方法 `_handleAppRoute(req, res, path, isApi)`
+- ✅ `src/app/web-panel.js` `_handleAppRoute`：
+  - `/apps` → HTML 索引页（`_renderAppsIndex` 渲染）
+  - `/api/apps` → JSON `{ ok, count, apps: listAppMeta() }`
+  - `/apps/<appName>/...` 与 `/api/apps/<appName>/...` → 委托 `appManager.handleAppWebRequest(appName, subPath, req)`
+  - 路径解析：segments[1] 为 appName（`/apps/`）或 segments[2] 为 appName（`/api/apps/`），剩余为 subPath
+  - 智能响应：根据 App 返回的 `Content-Type` 判断用 `text/html` 或 `application/json` 响应
+  - AppManager 未启用时所有 `/apps/` 与 `/api/apps/...` 返回 503
+- ✅ `src/app/web-panel.js` `_renderAppsIndex(apps)`：HTML 索引页（暗色 GitHub 主题 + 8 列表格：name/version/capability/manifestId/dataDir/permissions/contexts/description + 跳转链接 + "返回拓扑首页" / "JSON API" 链接 + "仅 GET，mutation 走 CLI" 提示）
+- ✅ `src/app/web-panel.js` `_apiStatus`：新增 `apps: { enabled, count, names }` 字段
+- ✅ `src/app/web-panel.js` HTML 拓扑首页：header 新增 `Apps` + `/api/apps` 链接；侧边栏新增 `Apps（M9.4）` 区块（AppManager 启用状态 + 已加载 App 数 + 每个 App 的跳转链接）
+
+**集成测试覆盖**（`test/web-panel-apps.test.js`，24 个测试）：
+
+- `/api/apps` 端点（3 个）：AppManager 启用 + 有 App / 启用 + 无 App / 未启用 503
+- `/apps` HTML 索引页（3 个）：有 App 时 HTML 表格 / 无 App 时空状态 / 未启用 503
+- `/apps/<appName>/...` 路由分发（5 个）：API 路由分发成功 / 静态挂载点分发 / App 未加载 404 / App 路径不存在 404 / AppManager 未启用 503
+- 严格 GET-only 约束（3 个）：POST /api/apps 405 / PUT /apps/foo/ 405 / DELETE /api/apps/foo 405
+- `/api/status` 新增 apps 字段（2 个）：启用时 enabled=true + count + names / 未启用时 enabled=false
+- HTML 首页侧边栏 Apps 区块（3 个）：含 Apps 区块标题 / 含 /apps 与 /api/apps 链接 / 不泄露私钥
+- App 返回 HTML 内容（1 个）：Content-Type: text/html 时按 HTML 响应
+- 现有路由不破坏（4 个）：/api/status 仍可用 / /healthz 仍可用 / / 仍可用 / 未注册路径仍 404
+
+✅ 全量回归 925/925 通过（M9.3 后 901 + M9.4 新增 24 = 925，无 regression）
 
 ### M1 双平面传输基线
 
@@ -549,14 +582,24 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e + SDK，约 50 秒，共 901 个用例）
+# 全部测试（单元 + e2e + SDK，约 55 秒，共 925 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（901 个用例，全部通过）：
+测试覆盖（925 个用例，全部通过）：
+
+**M9.4 WebPanel × AppManager 路由分发阶段（24 个）**
+- /api/apps 端点测试（3 个）：AppManager 启用+有 App 返回 ok:true+apps 列表 / 启用+无 App count=0 / 未启用 503
+- /apps HTML 索引页（3 个）：有 App 时返回 HTML 表格 / 无 App 时返回空状态 / 未启用 503
+- /apps/<appName>/... 路由分发（5 个）：API 路由分发成功 / 静态挂载点分发 / App 未加载 404 / 路径不存在 404 / AppManager 未启用 503
+- 严格 GET-only 约束（3 个）：POST/PUT/DELETE 返回 405（M9 理论修正）
+- /api/status 新增 apps 字段（2 个）：启用时 enabled=true+count+names / 未启用时 enabled=false
+- HTML 首页侧边栏 Apps 区块（3 个）：含 Apps 区块标题 / 含 /apps 与 /api/apps 链接 / 不泄露私钥
+- App 返回 HTML 内容（1 个）：Content-Type: text/html 时按 HTML 响应
+- 现有路由不破坏（4 个）：/api/status / /healthz / / / 未注册路径 404
 
 **M9.3 AppManager 集成阶段（52 个）**
 - app-manager 单元测试（30 个）：空目录 / 不存在目录 / 隐藏目录跳过 / 单 App 加载 / 多 App 加载 / start() hook 调用 / listAppMeta / manifest 缺失跳过 / name 与目录名不一致跳过 / entryPoint 不存在跳过 / 重复加载 AppAlreadyLoadedError / stop 幂等 / start 重复调用返回空 / stop 清理订阅 / dispatchCreditMessage 派发 / 无 targetApp 返回 0 / targetApp 未加载返回 0 / _injectCliCommands 注入 Cli / autoLoadCli=false / handleAppWebRequest 委托 / App 未加载 404 / listWebRoutes / 构造参数
@@ -670,7 +713,7 @@ havix/
 │   │   └── relay.js               RelayRegistry（准入阈值 + epoch 轮换，M5 已实现）
 │   └── app/
 │       ├── cli.js                 命令行 REPL（M8.2-1/2/3 已实现：tokenize/parseArgs + 43 个命令 = 7 诊断 + 11 M3-M4 + 25 M5-M7）
-│       ├── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化）
+│       ├── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化；M9.4：新增 /apps 与 /api/apps 路由分发到 AppManager）
 │       └── app-manager.js         App 容器管理器（M9.3：扫描 apps/ → manifest → createApp → 注入 Cli + 派发 credit 消息）
 ├── sdk/                           Havix SDK（M9.1 + M9.2 + M9.3 已实现）
 │   ├── index.js                   SDK 入口（导出 errors + permissions + manifest + 7 大子模块工厂 + createApp + createSnodeMock）
@@ -750,6 +793,7 @@ havix/
 | M9.1 AppManifest | ✅ 已完成 | 7 个 SDK 错误类型 + 28 项权限白名单 + AppManifest 类（11 字段）+ 极简 YAML 解析器 + 111 个单元测试 |
 | M9.2 SDK 接口 | ✅ 已完成 | createApp 入口 + 7 大子模块（context/market/credit/wiki/tunnel/arbitration/transport）+ 4 辅助模块（ipfs/web/cli/state）+ mock SNode + 253 个 SDK 测试 |
 | M9.3 AppManager | ✅ 已完成 | src/app/app-manager.js（扫描 apps/ 加载 manifest + createApp 装配 + start hook + CLI 命令注入 + credit 消息派发）+ state.js 接入 persistence.js 写盘 + config --apps/--no-apps/--apps-dir + 52 个集成测试 |
+| M9.4 Web 路由扩展 | ✅ 已完成 | web-panel.js 接入 AppManager：/apps + /api/apps + /apps/<appName>/... 路由分发 + HTML 索引页 + 侧边栏 Apps 区块 + /api/status apps 字段 + 严格 GET-only + 503 降级 + 24 个集成测试 |
 
 ## 核心设计决策（M1 → M2 → M3 → M4 → M5 → M6 → M7 阶段递进）
 

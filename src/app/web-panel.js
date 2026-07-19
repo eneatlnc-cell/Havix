@@ -33,6 +33,9 @@
  *   GET /api/registry/treasury     金库余额 + 历史
  *   GET /api/registry/tunnel       隧道列表 + 状态
  *   GET /api/registry/relay        relay 状态 + 候选
+ *   GET /api/apps                  已加载 App 列表（M9.4 新增）
+ *   GET /apps/<appName>/...        App 路由分发到 AppManager（M9.4 新增）
+ *   GET /api/apps/<appName>/...    App API 路由分发到 AppManager（M9.4 新增）
  *   GET /healthz                   健康检查（200 OK）
  *
  * vis-network 数据模型：
@@ -165,7 +168,21 @@ export class WebPanel {
       }
 
       if (req.method !== 'GET') {
-        this._sendJson(res, 405, { error: '仅支持 GET 方法' })
+        this._sendJson(res, 405, {
+          error: '仅支持 GET 方法',
+          hint: 'App Web API 严格 GET-only（M9 理论修正：协议即法律，mutation 走 CLI）',
+        })
+        return
+      }
+
+      // App 路由分发（M9.4 新增）：/apps/<appName>/... 与 /api/apps/<appName>/...
+      // 委托给 node.appManager.handleAppWebRequest（async）
+      if (path === '/apps' || path.startsWith('/apps/')) {
+        this._handleAppRoute(req, res, path, false)
+        return
+      }
+      if (path === '/api/apps' || path.startsWith('/api/apps/')) {
+        this._handleAppRoute(req, res, path, true)
         return
       }
 
@@ -227,9 +244,171 @@ export class WebPanel {
         return { found: true, data: this._apiTunnel() }
       case '/api/registry/relay':
         return { found: true, data: this._apiRelay() }
+      // /api/apps 路由分发到 AppManager（不在此处理，由 _handle 早期分流）
+      // /api/apps/<appName>/... 同样在 _handle 早期分流到 _handleAppRoute
       default:
         return { found: false }
     }
+  }
+
+  /**
+   * 处理 /apps/ 与 /api/apps/ 路由（M9.4 新增）。
+   *
+   * 路径模式：
+   *   /apps                  → 列出已加载 App（HTML 索引）
+   *   /apps/<appName>/...    → 委托给 AppManager.handleAppWebRequest(appName, subPath, req)
+   *   /api/apps              → 列出已加载 App 元信息（JSON）
+   *   /api/apps/<appName>/... → 委托给 AppManager.handleAppWebRequest（同上）
+   *
+   * AppManager 未启用时：
+   *   /apps                  → 503 错误页
+   *   /apps/<appName>/...    → 503 JSON
+   *   /api/apps              → { ok: false, error: 'AppManager 未启用' }
+   *   /api/apps/<appName>/... → 503 JSON
+   *
+   * @param {object} req HTTP 请求对象
+   * @param {object} res HTTP 响应对象
+   * @param {string} path 完整路径（如 /apps/foo/bar 或 /api/apps/foo/bar）
+   * @param {boolean} isApi 是否为 /api/apps/ 前缀（JSON 响应）
+   * @returns {Promise<void>}
+   */
+  async _handleAppRoute(req, res, path, isApi) {
+    const am = this.node?.appManager
+
+    // ── 1. /apps 或 /api/apps（无 appName）：返回 App 列表 ──
+    if (path === '/apps' || path === '/api/apps') {
+      if (!am) {
+        return this._sendJson(res, 503, {
+          ok: false,
+          error: 'AppManager 未启用（使用 --apps 开启）',
+        })
+      }
+      const apps = am.listAppMeta()
+      if (isApi) {
+        return this._sendJson(res, 200, { ok: true, count: apps.length, apps })
+      }
+      // /apps 列表 HTML
+      const html = this._renderAppsIndex(apps)
+      return this._sendHtml(res, 200, html)
+    }
+
+    // ── 2. /apps/<appName>/... 与 /api/apps/<appName>/...：分发到 AppManager ──
+    // 路径解析：取第 2 段为 appName，剩余为 subPath
+    const segments = path.split('/').filter(Boolean)  // ['apps', 'foo', 'bar'] 或 ['api', 'apps', 'foo', 'bar']
+    const appName = isApi ? segments[2] : segments[1]
+    if (!appName) {
+      return this._sendJson(res, 404, { error: `路径格式错误：${path}` })
+    }
+
+    if (!am) {
+      return this._sendJson(res, 503, {
+        ok: false,
+        error: `AppManager 未启用，无法处理 /apps/${appName}/（使用 --apps 开启）`,
+      })
+    }
+
+    // 子路径（去掉前缀，保留 / 分隔）
+    //   /apps/foo/bar/baz → subPath = "bar/baz"
+    //   /api/apps/foo/bar → subPath = "bar/baz"
+    const prefixSegments = isApi ? 3 : 2
+    const restSegs = segments.slice(prefixSegments)
+    const subPath = restSegs.join('/')
+
+    try {
+      const result = await am.handleAppWebRequest(appName, subPath, {
+        method: req.method,
+        headers: req.headers,
+        url: req.url,
+      })
+      if (!result || typeof result !== 'object') {
+        return this._sendJson(res, 500, { error: `App ${appName} 返回非对象` })
+      }
+      const status = result.status ?? 200
+      const body = result.body ?? null
+      const headers = result.headers ?? { 'Content-Type': 'application/json; charset=utf-8' }
+
+      // 智能响应：根据 Content-Type 判断用 _sendHtml 还是 _sendJson
+      const ct = headers['Content-Type'] || headers['content-type'] || ''
+      if (typeof ct === 'string' && ct.includes('text/html')) {
+        const html = typeof body === 'string' ? body : JSON.stringify(body)
+        res.writeHead(status, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Length': Buffer.byteLength(html),
+          'Cache-Control': 'no-store',
+        })
+        return res.end(html)
+      }
+      // JSON 默认响应
+      const json = typeof body === 'string' ? body : JSON.stringify(body)
+      res.writeHead(status, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(json),
+        'Cache-Control': 'no-store',
+      })
+      return res.end(json)
+    } catch (err) {
+      return this._sendJson(res, 500, {
+        error: `App ${appName} 处理失败: ${err?.message ?? String(err)}`,
+      })
+    }
+  }
+
+  /**
+   * 渲染 /apps 索引页（HTML）。
+   * @param {Array<object>} apps listAppMeta() 返回值
+   * @returns {string} HTML
+   */
+  _renderAppsIndex(apps) {
+    const rows = (apps || []).map(a => `
+      <tr>
+        <td><a href="/apps/${a.name}/">${a.name}</a></td>
+        <td>${a.version}</td>
+        <td>${a.capability}</td>
+        <td>${a.manifestId}</td>
+        <td>${a.dataDir}</td>
+        <td>${(a.permissions || []).join(', ') || '(空)'}</td>
+        <td>${(a.contexts || []).join(', ') || '(无)'}</td>
+        <td>${a.description || ''}</td>
+      </tr>`).join('')
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Havix Apps · M9.4</title>
+  <style>
+    body { margin: 0; padding: 20px; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; font-size: 20px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: "SF Mono", "Consolas", monospace; }
+    th { color: #f778ba; text-align: left; padding: 8px 12px; border-bottom: 1px solid #30363d; }
+    td { padding: 8px 12px; border-bottom: 1px dashed #21262d; color: #79c0ff; }
+    tr:hover td { background: #161b22; }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { color: #8b949e; font-size: 12px; margin-bottom: 16px; }
+    .empty { color: #8b949e; padding: 32px 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Havix Apps · 已加载 ${apps?.length ?? 0} 个 App</h1>
+  <div class="meta">
+    <a href="/">← 返回拓扑首页</a> ·
+    <a href="/api/apps">JSON API</a> ·
+    仅 GET，mutation 走 CLI
+  </div>
+  ${apps && apps.length > 0 ? `
+  <table>
+    <thead>
+      <tr>
+        <th>name</th><th>version</th><th>capability</th><th>manifestId</th>
+        <th>dataDir</th><th>permissions</th><th>contexts</th><th>description</th>
+      </tr>
+    </thead>
+    <tbody>${rows}
+    </tbody>
+  </table>` : `<div class="empty">暂无已加载的 App（apps 目录为空或不存）</div>`}
+</body>
+</html>`
   }
 
   // ──────────────────────────────────────────
@@ -257,6 +436,12 @@ export class WebPanel {
         tunnels: n.tunnelManager?.listTunnels?.().length ?? 0,
         treasuryBalance: n.treasury?.getBalance?.() ?? 0,
         processedCreditNonces: n._processedCreditNonces?.size ?? 0,
+      },
+      // M9.4：AppManager 状态
+      apps: {
+        enabled: !!n.appManager,
+        count: n.appManager?.listAppNames?.().length ?? 0,
+        names: n.appManager?.listAppNames?.() ?? [],
       },
     }
   }
@@ -689,6 +874,8 @@ export class WebPanel {
       <span id="peerId">加载中...</span> ·
       <a href="/api/status" target="_blank">/api/status</a> ·
       <a href="/api/topology" target="_blank">/api/topology</a> ·
+      <a href="/apps">Apps</a> ·
+      <a href="/api/apps" target="_blank">/api/apps</a> ·
       <span id="refresh">自动刷新 5s</span>
     </div>
   </header>
@@ -813,7 +1000,14 @@ export class WebPanel {
         + row('tunnels', r.tunnels)
         + row('treasury 余额', r.treasuryBalance)
         + row('credit nonce', r.processedCreditNonces)
+        + '<h2>Apps（M9.4）</h2>'
+        + row('AppManager 启用', s.apps ? (s.apps.enabled ? '是' : '否') : '?')
+        + row('已加载 App 数', s.apps ? s.apps.count : 0)
+        + (s.apps && s.apps.names && s.apps.names.length > 0
+          ? s.apps.names.map((n) => linkRow('/apps/' + n + '/')).join('')
+          : row('App', '(无)'))
         + '<h2>API 链接</h2>'
+        + linkRow('/api/apps')
         + linkRow('/api/identity')
         + linkRow('/api/neighbors')
         + linkRow('/api/topics')

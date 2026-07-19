@@ -1012,7 +1012,7 @@ test('SDK 集成：App A 创建市场 → App B 加入 → 双方收到消息', 
 | **M9.1** | AppManifest + 解析 + 校验 + 权限白名单 | 中 | ~40 测试 | ✅ 111 测试 |
 | **M9.2** | SDK 入口 + 7 大接口骨架 + mock SNode | 中 | ~70 测试 | ✅ 253 测试 |
 | **M9.3** | AppManager + SNode 集成 + config 选项 | 中 | ~15 测试 | ✅ 52 测试 |
-| **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 | ⏳ |
+| **M9.4** | Web 面板路由扩展 + App API | 中 | ~10 测试 | ✅ 24 测试 |
 | **M9.5** | empty-app 参考模板 + 集成测试 | 中 | ~15 测试 | ⏳ |
 
 每个子阶段完成后跑全量回归，确认无 regression。
@@ -1144,8 +1144,16 @@ havix/                          # 主仓库
    - `sdk/manifest.js` 升级 `parseYamlScalar` 支持内联数组 `[a, b, c]` / `["a", "b"]`
    - `src/config.js` 新增 `--apps` / `--no-apps` / `--apps-dir <path>` + 环境变量 `HAVIX_APPS` / `HAVIX_APPS_DIR`
    - `src/s-node.js` startApp 流程插入 AppManager（在 WebPanel 与 Cli 之间启动），shutdown 顺序变为 `Cli → AppManager → WebPanel → SNode`；`_handleCreditMessage` 在镜像成功后调用 `appManager.dispatchCreditMessage(...)` 按 `targetApp` 派发到对应 App
-4. M9.4 Web 面板路由扩展 + App API：WebPanel 接入 AppManager 路由聚合，`/api/apps/<appName>/...` 由 AppManager.handleAppWebRequest 派发；扩展 App API（消息订阅、生命周期事件等）。M9.3 完成后停下来等你确认，再进 M9.4
+4. ✅ **M9.4 Web 面板路由扩展 + App API**已完成（24 集成测试 / 925 全量回归通过）
+   - `src/app/web-panel.js` `_handle`：早期分流 `/apps/` 与 `/api/apps/` 前缀到 `_handleAppRoute(req, res, path, isApi)`
+   - `_handleAppRoute`：`/apps` HTML 索引页 / `/api/apps` JSON 列表 / `/apps/<appName>/...` 与 `/api/apps/<appName>/...` 委托给 `appManager.handleAppWebRequest(appName, subPath, req)`
+   - `_renderAppsIndex(apps)`：HTML 索引页（暗色主题 + 8 列表格 + 跳转链接）
+   - `_apiStatus` 新增 `apps: { enabled, count, names }` 字段
+   - HTML 拓扑首页 header 新增 `Apps` 链接；侧边栏新增 `Apps（M9.4）` 区块
+   - 严格 GET-only：POST/PUT/DELETE 返回 405，hint 提示"协议即法律，mutation 走 CLI"
+   - AppManager 未启用时 `/apps/` 与 `/api/apps/...` 返回 503 + 提示 `--apps` 开启
+5. M9.5 empty-app 参考模板 + 集成测试：提供 `apps/empty-app/` 参考模板（manifest + entryPoint + start/stop hook），文档说明 App 开发流程；端到端启动节点加载 empty-app，验证 hello 命令、web 路由、state 持久化都正常工作。M9.4 完成后停下来等你确认，再进 M9.5
 
 ---
 
-**Last Updated**: M9.3 AppManager + SNode 集成 + config 选项已完成 · 全量回归 901/901 通过 · 下一步 M9.4 Web 面板路由扩展 + App API
+**Last Updated**: M9.4 Web 面板路由扩展 + App API 已完成 · 全量回归 925/925 通过 · 下一步 M9.5 empty-app 参考模板 + 集成测试
