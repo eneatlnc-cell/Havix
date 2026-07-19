@@ -322,6 +322,9 @@ export class SNode {
     this.config = config
     this.log = makeLogger(config.logLevel)
 
+    // M9.3 AppManager 句柄（在 startApp() 中由外部注入；SNode 用它派发 credit 消息）
+    this.appManager = null
+
     // M8.1 持久化目录：dataDir/ledgers/
     // 复用 config.dataDir（默认 '.data'，可由 --data-dir 或 HAVIX_DATA_DIR 覆盖）
     // 不存在则 start() 时 ensureDir 创建
@@ -1477,6 +1480,23 @@ export class SNode {
     this._persistCreditNonces()  // M8.1：落盘 nonce 集合
     this.log('info', 'credit',
       `镜像 ${note.type} credit（issuer=${note.issuerDid.slice(0, 12)}..., holder=${note.holderDid.slice(0, 12)}..., amount=${note.amount}）`)
+
+    // M9.3：派发到 App 的 onReceived handler（如目标 App 已加载且注册了 handler）
+    if (this.appManager && typeof this.appManager.dispatchCreditMessage === 'function') {
+      try {
+        await this.appManager.dispatchCreditMessage({
+          ...note,
+          senderId: message.senderId,
+          timestamp: message.timestamp,
+          targetApp: payload.targetApp ?? note.targetApp ?? null,
+        })
+      } catch (err) {
+        // App handler 失败不影响 ledger 镜像结果
+        this.log('warn', 'credit',
+          `App dispatchCreditMessage 失败: ${err.message}`)
+      }
+    }
+
     return { applied: true }
   }
 
@@ -1897,9 +1917,45 @@ export async function startApp(config, deps = {}) {
     }
   }
 
+  // ── 2.5 AppManager 启动（M9.3 新增；在 Cli 之前，让 App CLI 命令可注入） ──
+  let appManager = null
+  if (config.apps !== false) {
+    try {
+      const { AppManager } = await import('./app/app-manager.js')
+      const appsDir = path.resolve(process.cwd(), config.appsDir)
+      appManager = new AppManager(node, null, { appsDir })
+      // 先 Cli 注入（让 App CLI 命令能注入）——Cli 可能未启用，App 仍正常加载
+      if (config.repl !== false) {
+        // Cli 还没构造，先用临时占位让 AppManager 知道命令注入存在；
+        // Cli 构造后再把真实实例塞回去并 register 已收集的命令
+        // —— 这里采用：等 Cli 构造后再触发 appManager.setCli + injectCommands
+      }
+      const loadedApps = await appManager.start()
+      // 让 SNode 引用 appManager（用于 _handleCreditMessage 派发到 App handler）
+      node.appManager = appManager
+      if (loadedApps.length > 0) {
+        println(`  [app-manager] 加载 ${loadedApps.length} 个 App: ${loadedApps.map(a => a.manifestId).join(', ')}`)
+      } else {
+        println(`  [app-manager] apps 目录无 App 或目录不存在: ${appsDir}`)
+      }
+    } catch (err) {
+      println(`  [app-manager] 启动失败（不阻断节点）: ${err.message}`)
+      appManager = null
+    }
+  }
+
   // ── 3. Cli REPL 启动（最后；同步返回但 readline 会保持 event loop） ──
   if (config.repl !== false) {
     cli = new CliCtor(node, { input: proc.stdin, output: stdout })
+    // M9.3：把 App CLI 命令注入到 Cli 实例
+    if (appManager) {
+      appManager.setCli(cli)
+      // 对已加载的 App 重新触发一次命令注入
+      for (const appName of appManager.listAppNames()) {
+        const app = appManager.getApp(appName)
+        appManager._injectCliCommands(appName, app)
+      }
+    }
     try {
       cli.start()
       println('  [cli] REPL 已启动，输入 help 查看命令（Ctrl+D 退出）')
@@ -1915,8 +1971,11 @@ export async function startApp(config, deps = {}) {
   if (!config.web) {
     println('  [web-panel] 已禁用（--no-web）')
   }
+  if (config.apps === false) {
+    println('  [app-manager] 已禁用（--no-apps）')
+  }
 
-  // ── 优雅退出：按 CLI → WebPanel → SNode 顺序 ──
+  // ── 优雅退出：按 CLI → AppManager → WebPanel → SNode 顺序 ──
   const stop = async (signal) => {
     if (stopped) return
     stopped = true
@@ -1929,14 +1988,21 @@ export async function startApp(config, deps = {}) {
       println(`  [shutdown] cli.stop 异常: ${err.message}`)
     }
 
-    // 2. WebPanel
+    // 2. AppManager（M9.3 新增；在 WebPanel 之前 stop，让 App state.flush 抢在节点关闭前完成）
+    try {
+      if (appManager) await appManager.stop()
+    } catch (err) {
+      println(`  [shutdown] appManager.stop 异常: ${err.message}`)
+    }
+
+    // 3. WebPanel
     try {
       if (webPanel) await webPanel.stop()
     } catch (err) {
       println(`  [shutdown] webPanel.stop 异常: ${err.message}`)
     }
 
-    // 3. SNode（最后；flush 持久化、关 libp2p / helia）
+    // 4. SNode（最后；flush 持久化、关 libp2p / helia）
     try {
       await node.stop()
     } catch (err) {
@@ -1954,7 +2020,7 @@ export async function startApp(config, deps = {}) {
     proc.on('SIGTERM', () => { stop('SIGTERM').catch(() => proc.exit(0)) })
   }
 
-  return { node, cli, webPanel, stop }
+  return { node, cli, webPanel, appManager, stop }
 }
 
 /**

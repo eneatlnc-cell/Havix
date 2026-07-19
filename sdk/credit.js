@@ -36,6 +36,8 @@ export function createCreditApi(snode, manifest) {
 
   const perms = manifest.permissions
   const appName = manifest.name
+  // App 注册的 credit 接收 handler 列表（M9.3 AppManager.dispatchCreditMessage 调用）
+  let appHandlers = null
 
   /**
    * 签发 credit（需高信誉）。
@@ -127,6 +129,30 @@ export function createCreditApi(snode, manifest) {
     }
     if (!snode._creditHandlers) snode._creditHandlers = []
     snode._creditHandlers.push(callback)
+    // 同时记录到 App 内部 handlers（M9.3 AppManager.dispatchCreditMessage 用）
+    if (!appHandlers) appHandlers = []
+    appHandlers.push(callback)
+  }
+
+  /**
+   * 内部派发：调用所有 onReceived 注册的 handler。
+   * 由 AppManager.dispatchCreditMessage 调用，不直接暴露给 App。
+   *
+   * @param {object} creditMsg
+   * @returns {Promise<void>}
+   * @private
+   */
+  async function _onReceived(creditMsg) {
+    if (!appHandlers || appHandlers.length === 0) return
+    for (const handler of appHandlers) {
+      try {
+        await handler(creditMsg, creditMsg?.senderId)
+      } catch (err) {
+        // 单 handler 失败不阻断其他 handler
+        // （错误由 AppManager 上层 log）
+        throw err
+      }
+    }
   }
 
   return {
@@ -135,5 +161,7 @@ export function createCreditApi(snode, manifest) {
     transfer,
     balance,
     onReceived,
+    // M9.3 内部 API（不直接暴露给 App，AppManager 用）
+    _onReceived,
   }
 }

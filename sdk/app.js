@@ -117,8 +117,15 @@ export async function createApp(snode, manifest, options = {}) {
   // 4.10 cli（无外部依赖，纯注册表）
   app.cli = createCliApi(snode, manifestObj)
 
-  // 4.11 state（无外部依赖，M9.2 mock 内存版）
-  app.state = createStateApi(snode, manifestObj, options.dataDir)
+  // 4.11 state（M9.2 内存版；M9.3 接 src/persistence.js 写盘）
+  //   options.persist：
+  //     - undefined → 懒加载 src/persistence.js（真实模式）
+  //     - null → 强制内存版（mock snode / 单元测试）
+  //     - object → 注入的 fake（测试用）
+  const stateOpts = options.persist !== undefined
+    ? { dataDir: options.dataDir, persist: options.persist, log: app.log }
+    : options.dataDir  // M9.2 兼容字符串形式
+  app.state = createStateApi(snode, manifestObj, stateOpts)
 
   // 5. 装配 lazy getter：访问 null 子模块时抛清晰错误
   //    避免每次调用都先 if (app.xxx === null) throw
@@ -141,6 +148,18 @@ export async function createApp(snode, manifest, options = {}) {
     if (snode._creditHandlers) snode._creditHandlers.length = 0
     // state flush（M9.3 真实 SNode 才有持久化效果）
     await app.state.flush?.()
+  }
+
+  // 7. 加载持久化状态（M9.3）
+  //    若 state.json 存在则读入内存；不存在或读失败时降级为空状态
+  //    options.autoLoad=false 可禁用（测试用）
+  if (options.autoLoad !== false && typeof app.state.load === 'function') {
+    try {
+      await app.state.load()
+    } catch (err) {
+      // load 失败不阻断 createApp（首启空状态等价于 load 失败）
+      app.log?.('warn', 'app', `state.load 失败: ${err.message}`)
+    }
   }
 
   return app

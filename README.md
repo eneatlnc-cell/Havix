@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.2 SDK 入口 + 7 大接口骨架 + mock SNode 已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
+> 当前阶段：**M9.3 AppManager + SNode 集成 + config 选项已完成** ✅ · MVP 全量审计通过 · 进入阶段二（M9 App SDK）
 
 ---
 
@@ -246,6 +246,28 @@ M9 阶段二第二步：把 M9.1 的 AppManifest + permissions + errors 串成 A
 
 ✅ 全量回归 849/849 通过（M9.1 后 707 + M9.2 新增 142 = 849，无 regression）
 ✅ SDK 单元测试 253/253 通过（mock SNode + 7 大子模块 + createApp 装配 + 端到端）
+
+### M9.3 AppManager + SNode 集成 + config 选项
+
+M9 阶段二第三步：把 M9.2 的 SDK 工厂接入真实 SNode 生命周期。新增 `src/app/app-manager.js` 扫描 `apps/` 目录加载每个 App 的 `manifest.yaml` 并调用 `createApp(snode, manifest, options)` 装配；SNode 启动顺序变为 `SNode → WebPanel → AppManager → Cli`，让 App CLI 命令可注入到 Cli 实例；SNode 收到 credit 消息时按 `payload.targetApp` 派发到对应 App 的 `onReceived` handler；config 新增 `--apps` / `--no-apps` / `--apps-dir` 选项 + `HAVIX_APPS` / `HAVIX_APPS_DIR` 环境变量；`sdk/state.js` 接入 `src/persistence.js` 实现真实持久化（`saveJsonAtomic` 原子写 + `loadJson` 读盘），M9.2 内存版通过 `persist=null` 仍可用。
+
+**核心交付**：
+
+- ✅ `src/app/app-manager.js`：AppManager 类（构造/start/stop/getApp/listApps/listAppNames/listAppMeta/setCli/dispatchCreditMessage/listWebRoutes/handleAppWebRequest/_loadApp/_injectCliCommands），扫描 `apps/<dir>/manifest.yaml` → `AppManifest.fromYaml` → `await import(entryPoint)` → `createApp` 装配 → 调用 `entryModule.start(snode, manifest, app, sdk)` hook；单 App 加载失败不阻断其他 App（log warn 跳过）；stop() 按启动反序停止所有 App，幂等
+- ✅ `sdk/state.js`：`flush()` 调 `saveJsonAtomic(persistPath, data, { log })` 原子写；`load()` 调 `loadJson(persistPath, {}, { log })` 读盘；`autoFlush=true`（默认）让 set/delete/clear 自动写盘；`persist=null` 退化为内存版（M9.2 兼容）；`persist=fakeObj` 注入测试用 fake；`persist=undefined` 懒加载 `src/persistence.js`
+- ✅ `sdk/credit.js`：新增 `_onReceived(creditMsg)` 内部派发方法，由 AppManager.dispatchCreditMessage 调用；onReceived 注册时同步加入 App 内部 handlers 列表
+- ✅ `sdk/app.js`：createApp 接受 `options.persist` 透传给 createStateApi；新增 `options.autoLoad` 控制 state.load 是否在 createApp 内自动调用（默认 true）
+- ✅ `sdk/manifest.js`：YAML 解析器升级 `parseYamlScalar` 支持内联数组 `[a, b, c]` 与 `["a", "b"]`（之前只支持多行 `- item` 格式）
+- ✅ `src/config.js`：DEFAULT_CONFIG 新增 `apps: true` / `appsDir: 'apps'`；parseArgv 支持 `--apps` / `--apps=true|false` / `--no-apps` / `--apps-dir <path>` / `--apps-dir=<path>`；loadConfig 支持 `HAVIX_APPS` / `HAVIX_APPS_DIR` 环境变量；printHelp 更新
+- ✅ `src/s-node.js`：SNode constructor 新增 `this.appManager = null`；startApp 流程在 WebPanel 与 Cli 之间插入 AppManager 启动（如 `config.apps !== false`）；Cli 构造后调 `appManager.setCli(cli)` + 对已加载 App 重新触发 `_injectCliCommands`；shutdown 顺序变为 `Cli → AppManager → WebPanel → SNode`；`_handleCreditMessage` 在镜像成功后调用 `appManager.dispatchCreditMessage(...)` 派发到对应 App；返回值新增 `appManager`
+
+**集成测试覆盖**（3 个测试文件，52 个测试）：
+
+- `test/app-manager.test.js`（30 个测试）：空目录 / 不存在目录 / 隐藏目录跳过 / 单 App 加载 / 多 App 加载 / start() hook 调用 / listAppMeta / manifest 缺失跳过 / name 与目录名不一致跳过 / entryPoint 不存在跳过 / 重复加载 AppAlreadyLoadedError / stop 幂等 / start 重复调用返回空 / stop 清理订阅 / dispatchCreditMessage 派发 / 无 targetApp 返回 0 / targetApp 未加载返回 0 / _injectCliCommands 注入 Cli / autoLoadCli=false / handleAppWebRequest 委托 / App 未加载 404 / listWebRoutes / 构造参数
+- `test/state-persist.test.js`（13 个测试）：persist=null 内存版 no-op / set 立即读 / 注入 fake persist / flush 调 saveJsonAtomic / load 调 loadJson / autoFlush=true 自动写盘 / autoFlush=false 手动 / 真实 src/persistence.js 写盘 → 重启 → load 恢复 / 文件不存在时 load 空状态 / delete 自动 flush / clear 自动 flush 空对象 / persistPath 正确 / dataDir 覆盖 manifest.name / 不可序列化 value 拒绝 / 空 key 拒绝 / defaultValue 兜底 / load 失败抛错
+- `test/config-apps.test.js`（9 个测试）：DEFAULT_CONFIG 含 apps/appsDir / parseArgv 解析 `--no-apps` / `--apps=false` / `--apps=true` / `--apps` / `--apps-dir <path>` / `--apps-dir=<path>` / 不传时 undefined / 同时设置 / `--no-apps + --apps-dir`
+
+✅ 全量回归 901/901 通过（M9.2 后 849 + M9.3 新增 52 = 901，无 regression）
 
 ### M1 双平面传输基线
 
@@ -527,14 +549,19 @@ node src/s-node.js --no-repl --no-web
 ## 测试
 
 ```bash
-# 全部测试（单元 + e2e + SDK，约 50 秒，共 849 个用例）
+# 全部测试（单元 + e2e + SDK，约 50 秒，共 901 个用例）
 npm test
 
 # 跳过 e2e 测试（CI 用）
 HAVIX_SKIP_E2E=1 npm test
 ```
 
-测试覆盖（849 个用例，全部通过）：
+测试覆盖（901 个用例，全部通过）：
+
+**M9.3 AppManager 集成阶段（52 个）**
+- app-manager 单元测试（30 个）：空目录 / 不存在目录 / 隐藏目录跳过 / 单 App 加载 / 多 App 加载 / start() hook 调用 / listAppMeta / manifest 缺失跳过 / name 与目录名不一致跳过 / entryPoint 不存在跳过 / 重复加载 AppAlreadyLoadedError / stop 幂等 / start 重复调用返回空 / stop 清理订阅 / dispatchCreditMessage 派发 / 无 targetApp 返回 0 / targetApp 未加载返回 0 / _injectCliCommands 注入 Cli / autoLoadCli=false / handleAppWebRequest 委托 / App 未加载 404 / listWebRoutes / 构造参数
+- state-persist 集成测试（13 个）：persist=null 内存版 no-op / 注入 fake persist / flush 调 saveJsonAtomic / load 调 loadJson / autoFlush=true 自动写盘 / autoFlush=false 手动 / 真实 src/persistence.js 写盘 → 重启 → load 恢复 / 文件不存在时 load 空状态 / delete 自动 flush / clear 自动 flush 空对象 / persistPath 正确 / dataDir 覆盖 manifest.name / 不可序列化 value 拒绝 / 空 key 拒绝 / load 失败抛错
+- config-apps 单元测试（9 个）：DEFAULT_CONFIG 含 apps/appsDir / parseArgv 解析 --no-apps / --apps=false / --apps=true / --apps / --apps-dir <path> / --apps-dir=<path> / 不传时 undefined / 同时设置
 
 **M9.2 SDK 阶段（142 个）**
 - snode-mock 单元测试（12 个）：mock SNode 4-context DID / sign+verify / createMarket / issueCredit / transferCredit / establishTunnel / wiki.publishEntry / fileDispute / ipfs.blockstore / 自定义 dids / 自定义 ledgers
@@ -643,8 +670,9 @@ havix/
 │   │   └── relay.js               RelayRegistry（准入阈值 + epoch 轮换，M5 已实现）
 │   └── app/
 │       ├── cli.js                 命令行 REPL（M8.2-1/2/3 已实现：tokenize/parseArgs + 43 个命令 = 7 诊断 + 11 M3-M4 + 25 M5-M7）
-│       └── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化）
-├── sdk/                           Havix SDK（M9.1 + M9.2 已实现）
+│       ├── web-panel.js           本地 Web 面板（M8.2-4：HTTP server 127.0.0.1 + 13 个 JSON API + vis-network 拓扑可视化）
+│       └── app-manager.js         App 容器管理器（M9.3：扫描 apps/ → manifest → createApp → 注入 Cli + 派发 credit 消息）
+├── sdk/                           Havix SDK（M9.1 + M9.2 + M9.3 已实现）
 │   ├── index.js                   SDK 入口（导出 errors + permissions + manifest + 7 大子模块工厂 + createApp + createSnodeMock）
 │   ├── errors.js                  7 个 SDK 错误类型（HavixSdkError 基类 + 6 个子类）
 │   ├── permissions.js             28 项权限白名单 + 6 个校验函数（isValidPermission / validatePermissions / checkPermission / hasPermission / getPermissionsByCategory）
@@ -721,6 +749,7 @@ havix/
 | M8.3 4 节点集成测试 | ✅ 已完成 | 4 节点 star 拓扑 harness + gossipsub 跨节点传播（vouch/wiki/credit 镜像）+ 持久化重启恢复 + nonce 重放保护 |
 | M9.1 AppManifest | ✅ 已完成 | 7 个 SDK 错误类型 + 28 项权限白名单 + AppManifest 类（11 字段）+ 极简 YAML 解析器 + 111 个单元测试 |
 | M9.2 SDK 接口 | ✅ 已完成 | createApp 入口 + 7 大子模块（context/market/credit/wiki/tunnel/arbitration/transport）+ 4 辅助模块（ipfs/web/cli/state）+ mock SNode + 253 个 SDK 测试 |
+| M9.3 AppManager | ✅ 已完成 | src/app/app-manager.js（扫描 apps/ 加载 manifest + createApp 装配 + start hook + CLI 命令注入 + credit 消息派发）+ state.js 接入 persistence.js 写盘 + config --apps/--no-apps/--apps-dir + 52 个集成测试 |
 
 ## 核心设计决策（M1 → M2 → M3 → M4 → M5 → M6 → M7 阶段递进）
 

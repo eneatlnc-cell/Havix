@@ -36,6 +36,10 @@ export const DEFAULT_CONFIG = {
   web: true,                  // 启动后开本地 Web 面板
   webPort: 7331,              // Web 面板端口（7331 = HAVIX）
   webHost: '127.0.0.1',      // Web 面板监听地址（仅本地，安全考虑）
+
+  // M9.3 App 容器：扫描 apps/ 目录加载 App
+  apps: true,                 // 启动时加载 apps/ 目录
+  appsDir: 'apps',            // App 目录路径（相对 cwd 或绝对路径）
 }
 
 /**
@@ -108,6 +112,14 @@ function parseArgv(argv) {
       }
     } else if (arg === '--web-host' || arg.startsWith('--web-host=')) {
       cli.webHost = arg.includes('=') ? arg.split('=')[1] : argv[++i]
+    } else if (arg === '--apps' || arg.startsWith('--apps=')) {
+      // --apps / --apps=true / --apps=false / --no-apps
+      const val = arg.includes('=') ? arg.split('=')[1] : 'true'
+      cli.apps = val === 'true' || val === '1'
+    } else if (arg === '--no-apps') {
+      cli.apps = false
+    } else if (arg === '--apps-dir' || arg.startsWith('--apps-dir=')) {
+      cli.appsDir = arg.includes('=') ? arg.split('=')[1] : argv[++i]
     } else if (arg === '--help' || arg === '-h') {
       printHelp()
       process.exit(0)
@@ -140,12 +152,15 @@ Havix — Haven of Affinity
   --[no-]web               启动后开本地 Web 面板（默认 true）
   --web-port <number>      Web 面板端口（默认 7331；0=随机）
   --web-host <host>        Web 面板监听地址（默认 127.0.0.1，仅本地）
+  --[no-]apps              启动时扫描 apps/ 加载 App（默认 true）
+  --apps-dir <path>        App 目录路径（默认 apps，相对 cwd 或绝对路径）
   -h, --help               显示帮助
 
 环境变量（被命令行参数覆盖）：
   HAVIX_PORT, HAVIX_NAME, HAVIX_DATA_DIR, HAVIX_BOOTSTRAP,
   HAVIX_MDNS, HAVIX_DHT, HAVIX_DHT_MODE, HAVIX_LOG,
-  HAVIX_REPL, HAVIX_WEB, HAVIX_WEB_PORT, HAVIX_WEB_HOST
+  HAVIX_REPL, HAVIX_WEB, HAVIX_WEB_PORT, HAVIX_WEB_HOST,
+  HAVIX_APPS, HAVIX_APPS_DIR
 
 示例：
   # 启动第一个节点
@@ -160,6 +175,12 @@ Havix — Haven of Affinity
 
   # 完全无应用层（纯节点）
   node src/s-node.js --no-repl --no-web
+
+  # 禁用 App 容器（仅协议层）
+  node src/s-node.js --no-apps
+
+  # 自定义 App 目录
+  node src/s-node.js --apps-dir /opt/havix/apps
 `)
 }
 
@@ -245,6 +266,13 @@ export function loadConfig() {
 
   if (env.HAVIX_WEB_HOST) config.webHost = env.HAVIX_WEB_HOST
   if (cli.webHost) config.webHost = cli.webHost
+
+  // ── M9.3 App 容器 ──
+  if (env.HAVIX_APPS !== undefined) config.apps = env.HAVIX_APPS === 'true'
+  if (cli.apps !== undefined) config.apps = cli.apps
+
+  if (env.HAVIX_APPS_DIR) config.appsDir = env.HAVIX_APPS_DIR
+  if (cli.appsDir) config.appsDir = cli.appsDir
 
   // 安全门槛（M8 审计修复 P0-D）：
   // Web 面板无认证机制，绑定非 127.0.0.1 地址会暴露所有 registry 数据。

@@ -751,6 +751,35 @@ function parseYamlScalar(raw) {
   if (raw === '[]') return []
   if (raw === '{}') return {}
 
+  // 内联数组：[a, b, c] 或 ["a", "b"]（M9.3 新增：支持 permissions: ["market:create", "credit:balance"]）
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    const inner = raw.slice(1, -1).trim()
+    if (inner === '') return []
+    // 拆分顶层的逗号（不递归处理嵌套数组/对象，M9 单层够用）
+    const items = []
+    let cur = ''
+    let inQuote = null
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i]
+      if (inQuote) {
+        if (ch === inQuote) {
+          inQuote = null
+        }
+        cur += ch
+      } else if (ch === '"' || ch === "'") {
+        inQuote = ch
+        cur += ch
+      } else if (ch === ',') {
+        items.push(cur.trim())
+        cur = ''
+      } else {
+        cur += ch
+      }
+    }
+    if (cur.trim() !== '') items.push(cur.trim())
+    return items.map(parseYamlScalar)
+  }
+
   // 去掉引号
   if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
     return raw.slice(1, -1)
