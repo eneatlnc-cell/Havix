@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Havix SDK credit API（M9.2）
  * ───────────────────────────────────────────────

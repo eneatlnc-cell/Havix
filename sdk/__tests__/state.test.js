@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * state API 单元测试（M9.2）
  * 覆盖 set/get/delete/clear/keys/entries + 持久化路径计算。

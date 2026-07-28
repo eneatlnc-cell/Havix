@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * web API 单元测试（M9.2）
  * 覆盖 GET-only 约束 + mount/get/listRoutes/hasRoute/handle。

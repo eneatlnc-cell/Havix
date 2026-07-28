@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * mock SNode 单元测试（M9.2）
  * 验证 mock SNode 提供的方法可工作 + 调用记录正确。

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * M3.1 message-types 单元测试
  * ───────────────────────────────────────────────

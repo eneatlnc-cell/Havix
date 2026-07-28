@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * config.js M9.3 App 选项测试
  * ───────────────────────────────────────────────

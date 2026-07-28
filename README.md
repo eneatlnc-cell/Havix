@@ -999,3 +999,32 @@ havix/
 ## 免责声明
 
 Havix 仅用于学术验证目的，不涉及任何现实政治或商业用途。详见 [白皮书第 15 章](./Havix-Technical-Whitepaper.md)。
+
+---
+
+## License
+
+Havix is licensed under the **Apache License, Version 2.0** (Apache-2.0).
+
+- Full license text: see [LICENSE](./LICENSE)
+- Third-party notices: see [NOTICE](./NOTICE)
+- Copyright: © 2024-2026 Havix Contributors
+
+Every source file carries an SPDX identifier:
+
+```
+// SPDX-License-Identifier: Apache-2.0
+```
+
+### What this means
+
+- ✅ You may use, copy, modify, merge, publish, and distribute this software, including for commercial purposes.
+- ✅ You must retain the LICENSE and NOTICE files in derivative distributions.
+- ✅ You must clearly indicate any modifications you make to the original files.
+- ✅ Patent grant: contributors grant you a perpetual, worldwide, non-exclusive, royalty-free patent license.
+
+For the complete terms, see the [Apache License 2.0 summary](https://choosealicense.com/licenses/apache-2.0/) or the full [LICENSE](./LICENSE) file.
+
+### Related project
+
+The Havix network layer is co-developed with the [Aether Foundation](https://github.com/eneatlnc-cell/Aether) governance kernel. Aether provides the on-chain governance kernel on Arbitrum; Havix provides the off-chain P2P coordination plane. Both are released under Apache-2.0.

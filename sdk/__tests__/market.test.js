@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * market API 单元测试（M9.2）
  * 覆盖：

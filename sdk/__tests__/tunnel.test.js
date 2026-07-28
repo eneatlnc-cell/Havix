@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * tunnel API 单元测试（M9.2）
  * 覆盖 3 个权限门控 + open/send/breakLink/close。

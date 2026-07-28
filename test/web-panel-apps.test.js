@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * M9.4 WebPanel × AppManager 路由分发集成测试
  * ───────────────────────────────────────────────

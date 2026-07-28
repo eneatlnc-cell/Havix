@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * credit API 单元测试（M9.2）
  * 覆盖 4 个权限门控 + 参数校验 + 委托 snode + onReceived 回调。

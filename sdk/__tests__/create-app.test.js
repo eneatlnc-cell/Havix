@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * createApp 入口单元测试（M9.2）
  * 覆盖装配 + 子模块缺依赖处理 + manifest 归一化 + _ensureModule + stop。

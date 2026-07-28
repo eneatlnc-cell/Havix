@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * M9.1 AppManifest + 解析 + 校验单元测试
  * ───────────────────────────────────────────────

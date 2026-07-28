@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Havix SDK mock SNode（M9.2）
  * ───────────────────────────────────────────────

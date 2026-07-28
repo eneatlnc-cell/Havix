@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * transport API 单元测试（M9.2）
  * 覆盖 2 个权限门控 + topic 校验 + publish/subscribe/unsubscribe。

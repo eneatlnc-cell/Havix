@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * cli API 单元测试（M9.2）
  * 覆盖 register/unregister/listCommands/hasCommand/execute + 命令名前缀校验。

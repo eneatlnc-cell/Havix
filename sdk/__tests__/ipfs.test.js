@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * ipfs API 单元测试（M9.2）
  * 覆盖 2 个权限门控 + add/get/computeCid + 数据往返一致。

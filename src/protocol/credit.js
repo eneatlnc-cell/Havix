@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Havix Credit 双轨经济（M4）
  * ───────────────────────────────────────────────

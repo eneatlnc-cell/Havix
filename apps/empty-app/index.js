@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Havix empty-app 参考模板（M9.5）
  * ───────────────────────────────────────────────
