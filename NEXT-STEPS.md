@@ -932,8 +932,8 @@ interface CharterStore {
 
 ### 15.2 三层架构关联仓库
 
-- Germ（L1 认知执行层）：https://github.com/eneatlnc-cell/Germ
-- Aether（L2 链上治理层）：待建（M11 暴露 GovernanceAnchor 契约后启动）
+- Germ（L1 认知执行层）：https://github.com/eneatlnc-cell/Germ（参考实现 v2.2 创世宪章对齐版）
+- Aether（L2 链上治理层）：https://github.com/eneatlnc-cell/Aether（治理内核 v3.6 · BSC 单链 · v3.0 审计整改闭环 · 待主网部署）
 
 ### 15.3 外部参考
 

@@ -4,7 +4,7 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**M9.6 安全加固第一步（6 项立即修复）已完成** ✅ · 深度审计报告已生成 · 进入阶段二（M9 App SDK）
+> 当前阶段：**验证形态（M1–M10）已全部交付** ✅ · AUDIT-M10 全栈审计 5 P0 + 15 P1 全部修复闭环 · 测试基线 1234/1234（主仓库 1021 + Embas 翻译市场 213）· **内测进行中**，M11（完整化形态：L1/L2 契约原生暴露 + 红线拦截器 + 活宪章）待内测反馈后启动。阶段定位详见 [NEXT-STEPS.md](./NEXT-STEPS.md)
 
 ---
 
@@ -767,7 +767,7 @@ havix/
 ├── Havix-Technical-Whitepaper.md  技术白皮书
 ├── Havix-Vision.html              愿景展示页
 ├── DEPLOY.md                      部署运行说明（13 章节）
-├── ROADMAP.md                     MVP 后开发路线（M9-M12+）
+├── ROADMAP.md                     开发路线（M9–M13+；M9/M10 已交付，M11 待内测反馈启动）
 ├── M9-DESIGN.md                   M9 App SDK 详细设计（16 章节）
 ├── TRANSLATION-MARKET.md          第一个 App 翻译市场设计
 ├── src/                           协议层（M1-M8 已实现）
