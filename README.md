@@ -4,7 +4,9 @@
 
 Havix 是一个去中心化对等网络协议，用于验证社会学论文《底层高认知者的结构性困境》中提出的"分层自组织网络"假设。详细设计见 [技术白皮书](./Havix-Technical-Whitepaper.md) 与 [愿景展示](./Havix-Vision.html)。部署运行说明见 [DEPLOY.md](./DEPLOY.md)，MVP 后开发路线见 [ROADMAP.md](./ROADMAP.md)，M9 App SDK 详细设计见 [M9-DESIGN.md](./M9-DESIGN.md)，第一个 App 翻译市场设计见 [TRANSLATION-MARKET.md](./TRANSLATION-MARKET.md)。
 
-> 当前阶段：**验证形态（M1–M10）已全部交付** ✅ · AUDIT-M10 全栈审计 5 P0 + 15 P1 全部修复闭环 · 测试基线 1234/1234（主仓库 1021 + Embas 翻译市场 213）· **内测进行中**，M11（完整化形态：L1/L2 契约原生暴露 + 红线拦截器 + 活宪章）待内测反馈后启动。阶段定位详见 [NEXT-STEPS.md](./NEXT-STEPS.md)
+> **回路语境（2026-08 对齐）**：Havix 已从独立 P2P 协议升格为**三层主权回路的 L0 网络本体**——L0 Havix（物理锚定主权）/ L1 Germ（认知执行，AI 公民）/ L2 Aether（BSC 链上治理）。回路的**市场第一步是 Engine + Vault**（已交付的消费级双 App：端到端加密社交 + 离线钥匙盒，私库 `Engine` / `Vault`，加密协议公开审计于 [Engine3.0](https://github.com/eneatlnc-cell/Engine3.0)）；Embas 翻译市场为 Havix 能力**验证实验**，已从回路叙事撤出，结论沉淀于本协议。跨库对外叙事的唯一事实源：Spark 站点仓库 `CANON.md`。
+>
+> 当前阶段：**验证形态（M1–M10）已全部交付** ✅ · AUDIT-M10 全栈审计 5 P0 + 15 P1 全部修复闭环 · 测试基线 1234/1234（主仓库 1021 + Embas 翻译市场 213）· 协议**已验证待命**（内测实验收官），M11（完整化形态：L1/L2 契约原生暴露 + 红线拦截器 + 活宪章）按回路节奏排期。阶段定位详见 [NEXT-STEPS.md](./NEXT-STEPS.md)
 
 ---
 
