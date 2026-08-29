@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-only
 
 /**
  * AUDIT-M10 MVP 协议层 P1-1 ~ P1-5 回归测试（5 项）

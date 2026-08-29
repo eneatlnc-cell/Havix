@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-only
 
 /**
  * Havix 编辑员资格协议（M3.2 — vouch 累积阈值门控 / M4 — 信誉加权升级）

@@ -1006,27 +1006,31 @@ Havix 仅用于学术验证目的，不涉及任何现实政治或商业用途�
 
 ## License
 
-Havix is licensed under the **Apache License, Version 2.0** (Apache-2.0).
+Havix is licensed under the **GNU Affero General Public License v3.0 only** (AGPL-3.0-only).
 
 - Full license text: see [LICENSE](./LICENSE)
-- Third-party notices: see [NOTICE](./NOTICE)
+- Notices: see [NOTICE](./NOTICE)
 - Copyright: © 2024-2026 Havix Contributors
 
 Every source file carries an SPDX identifier:
 
 ```
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-only
 ```
+
+### Why AGPL v3.0
+
+The network layer is the trust root of the loop: unlinkable DIDs, device anchoring, relay deduplication. **Strong copyleft is a security commitment** — anyone who runs a modified Havix node and lets the public talk to it must publish their modifications (AGPL §13). You cannot quietly fork the trust substrate and weaken it behind a closed relay.
 
 ### What this means
 
-- ✅ You may use, copy, modify, merge, publish, and distribute this software, including for commercial purposes.
-- ✅ You must retain the LICENSE and NOTICE files in derivative distributions.
-- ✅ You must clearly indicate any modifications you make to the original files.
-- ✅ Patent grant: contributors grant you a perpetual, worldwide, non-exclusive, royalty-free patent license.
+- ✅ You may use, study, modify and run this software, including commercially.
+- ✅ You must release derivative works under AGPL-3.0-only as well.
+- ✅ If you run a modified version as a network service, you must offer that exact source code to its users.
+- ✅ You must retain this license and copyright notices in distributions.
 
-For the complete terms, see the [Apache License 2.0 summary](https://choosealicense.com/licenses/apache-2.0/) or the full [LICENSE](./LICENSE) file.
+For the complete terms, see the [AGPL-3.0 summary](https://choosealicense.com/licenses/agpl-3.0/) or the full [LICENSE](./LICENSE) file.
 
-### Related project
+### Related projects
 
-The Havix network layer is co-developed with the [Aether Foundation](https://github.com/eneatlnc-cell/Aether) governance kernel. Aether provides the on-chain governance kernel on Arbitrum; Havix provides the off-chain P2P coordination plane. Both are released under Apache-2.0.
+The Havix network layer is co-developed inside the eneatlnc-cell loop: [Engine3.0](https://github.com/eneatlnc-cell/Engine3.0) (public E2EE audit edition, AGPL-3.0) and [Aether](https://github.com/eneatlnc-cell/Aether) (on-chain governance kernel on BSC, Apache-2.0). The [Spark](https://github.com/eneatlnc-cell/Spark) site is Apache-2.0.

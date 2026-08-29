@@ -27,7 +27,7 @@
     "overlay-network"
   ],
   "author": "Havix Contributors",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@chainsafe/libp2p-noise": "^17.0.0",
     "@chainsafe/libp2p-yamux": "^8.0.1",
